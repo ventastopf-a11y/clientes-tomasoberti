@@ -197,11 +197,38 @@
     b.addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
     bar.appendChild(b);
   }
+  // Aviso visible cuando algo de la base no está bien configurado (en vez de mostrar la app vacía sin explicación).
+  function aviso(txt) {
+    let el = document.getElementById('aviso-base');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'aviso-base';
+      Object.assign(el.style, { position: 'fixed', left: '12px', right: '12px', bottom: '12px', zIndex: '90', padding: '12px 14px', borderRadius: '8px', background: 'var(--bad-soft,#fbe6e3)', color: 'var(--bad,#b3261e)', font: '14px system-ui,sans-serif', boxShadow: '0 4px 16px rgba(0,0,0,.15)', whiteSpace: 'pre-wrap' });
+      document.body.appendChild(el);
+    }
+    el.textContent = txt;
+  }
+  async function revisarAcceso() {
+    const { data: u } = await sb.auth.getUser();
+    const email = (u && u.user && u.user.email) || '';
+    const { data: ok, error } = await sb.rpc('es_permitido');
+    if (error) {
+      aviso(`No se pudo verificar el acceso (${error.message}).\nEn Supabase → SQL Editor corré los permisos "grant" de supabase/schema.sql.`);
+      return;
+    }
+    if (!ok) {
+      aviso(`El usuario ${email} entró pero no está habilitado, por eso no ve datos.\nEn Supabase → SQL Editor corré:\ninsert into public.permitidos (email) values ('${email}');\ny recargá la página.`);
+      return;
+    }
+    const { error: e2 } = await sb.from('clientes').select('id').limit(1);
+    if (e2) aviso(`El usuario está habilitado pero la base rechaza la lectura (${e2.message}).\nEn Supabase → SQL Editor corré los permisos "grant" de supabase/schema.sql.`);
+  }
   const ready = (async () => {
     if (document.readyState === 'loading') await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
     const { data } = await sb.auth.getSession();
     if (!data.session) await loginScreen();
     logoutButton();
+    revisarAcceso().catch(e => aviso('No se pudo conectar con Supabase: ' + (e && e.message)));
   })();
 
   // ---------- la misma interfaz que en claude.ai ----------
