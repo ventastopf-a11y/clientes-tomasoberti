@@ -1,0 +1,1345 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="cloud.js"></script>
+</head><body>
+<title>Cartera Mayorista</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: sticky header con pestañas; cada pestaña es una mesa de trabajo; la ficha del cliente se abre como panel lateral. */
+:root {
+  --bg: #f3f5f7; --surface: #ffffff; --surface-2: #f8f9fb; --line: #dce1e7; --fg: #16202c; --muted: #5b6676;
+  --accent: #0b6b70; --accent-ink: #ffffff; --accent-soft: #dff0f0;
+  --ok: #1b7343; --ok-soft: #e1f2e7; --warn: #9a5800; --warn-soft: #fbeed8;
+  --bad: #b3261e; --bad-soft: #fbe6e3; --info: #22509f; --info-soft: #e4ebf8; --sleep: #6a4aa8; --sleep-soft: #ede7f7;
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10151b; --surface: #171e27; --surface-2: #1c2530; --line: #2a3542; --fg: #e5e9ef; --muted: #96a2b3;
+  --accent: #4fc1c3; --accent-ink: #052a2b; --accent-soft: #12393b;
+  --ok: #62cf8f; --ok-soft: #143524; --warn: #f0b155; --warn-soft: #3a2a10; --bad: #f3877d; --bad-soft: #3e1815;
+  --info: #91b1f5; --info-soft: #172749; --sleep: #b89ff0; --sleep-soft: #2a2145; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #10151b; --surface: #171e27; --surface-2: #1c2530; --line: #2a3542; --fg: #e5e9ef; --muted: #96a2b3;
+  --accent: #4fc1c3; --accent-ink: #052a2b; --accent-soft: #12393b;
+  --ok: #62cf8f; --ok-soft: #143524; --warn: #f0b155; --warn-soft: #3a2a10; --bad: #f3877d; --bad-soft: #3e1815;
+  --info: #91b1f5; --info-soft: #172749; --sleep: #b89ff0; --sleep-soft: #2a2145; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--surface); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+.num, td.n, .mono { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top-in { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-block: 12px 8px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.mark { width: 34px; height: 34px; border-radius: 6px; display: grid; place-items: center; background: var(--fg); color: var(--surface); font-family: var(--f-display); font-weight: 800; font-size: 13px; letter-spacing: .04em; }
+.brand h1 { font-size: 19px; font-weight: 800; }
+.brand p { margin: 0; font-size: 12px; color: var(--muted); }
+.top-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.tabs button { border: 0; background: none; padding: 8px 12px 10px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabs .cnt { font-family: var(--f-mono); font-size: 11px; background: var(--bad-soft); color: var(--bad); border-radius: 10px; padding: 1px 6px; margin-left: 4px; }
+
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 7px 12px; border-radius: var(--r); cursor: pointer; font-weight: 500; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.sm { padding: 4px 9px; font-size: 12.5px; }
+.btn.danger { color: var(--bad); border-color: var(--bad); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.wa { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 14px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ok); background: var(--ok-soft); white-space: nowrap; }
+.wa:hover { text-decoration: underline; }
+
+main { padding-block: 18px 60px; display: grid; gap: 18px; }
+.banner { margin-top: 12px; padding: 10px 14px; border-radius: var(--r); background: var(--warn-soft); color: var(--warn); font-weight: 500; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 4px; }
+.kpi .lbl { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.kpi .val { font-family: var(--f-display); font-size: 26px; font-weight: 800; line-height: 1.1; }
+.kpi .val small { font-size: 14px; color: var(--muted); font-weight: 600; }
+.bar { height: 6px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 14px; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
+.card-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.card-h h2 { font-size: 15.5px; font-weight: 700; }
+.card-h .hint { font-size: 12px; color: var(--muted); }
+.card-b { padding: 12px 14px; }
+.count { font-family: var(--f-mono); font-size: 12px; color: var(--muted); margin-left: 6px; }
+
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); align-items: center; }
+.rows li:last-child { border-bottom: 0; }
+.rows .main { min-width: 0; display: grid; gap: 3px; }
+.rows .side { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.nm { border: 0; background: none; padding: 0; font-weight: 600; text-align: left; cursor: pointer; color: var(--fg); font-size: 13.5px; }
+.nm:hover { color: var(--accent); text-decoration: underline; }
+.sub { font-size: 12.5px; color: var(--muted); }
+.empty { padding: 18px 14px; color: var(--muted); font-size: 13px; }
+.more { padding: 8px 14px; font-size: 12.5px; }
+
+.pill { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 12px; white-space: nowrap; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.pill.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.pill.info { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.pill.sleep { background: var(--sleep-soft); color: var(--sleep); border-color: transparent; }
+.chips { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters input[type="search"] { flex: 1 1 220px; min-width: 0; }
+.filters > * { max-width: 100%; min-width: 0; }
+main > * { min-width: 0; }
+.filters label.sub { display: inline-flex; align-items: center; gap: 4px; }
+table.items { font-size: 12.5px; } table.items td, table.items th { padding: 5px 8px; }
+details.its { display: inline-block; margin-top: 2px; font-size: 12.5px; } details.its summary { cursor: pointer; color: var(--accent); } details.its ul { margin: 4px 0 0; padding-left: 18px; }
+.obs-in { width: 100%; min-width: 160px; border: 1px solid transparent; background: transparent; padding: 4px 6px; border-radius: 6px; font-size: 13px; }
+.obs-in:hover { border-color: var(--line); }
+.obs-in:focus { border-color: var(--accent); background: var(--surface); outline: none; }
+input, select, textarea { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 9px; min-width: 0; }
+textarea { resize: vertical; min-height: 60px; width: 100%; }
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface-2); }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.n { text-align: right; white-space: nowrap; font-family: var(--f-mono); font-size: 12.5px; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--surface-2); }
+
+.score { display: flex; align-items: center; gap: 8px; }
+.score .bar { width: 70px; }
+.score b { font-family: var(--f-mono); font-size: 12px; }
+
+form.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 10px; }
+form.grid .full { grid-column: 1 / -1; }
+label.f { display: grid; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 500; }
+label.f input, label.f select, label.f textarea { color: var(--fg); font-size: 13.5px; width: 100%; }
+label.chk { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.form-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; grid-column: 1 / -1; }
+
+#scrim { position: fixed; inset: 0; background: rgba(10, 15, 20, .38); z-index: 40; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(600px, 100%); background: var(--bg); z-index: 50; overflow-y: auto; border-left: 1px solid var(--line); box-shadow: -8px 0 30px rgba(0,0,0,.12); padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.drawer-in { display: grid; gap: 14px; padding: 16px; }
+.d-head { display: grid; gap: 8px; }
+.d-head h2 { font-size: 21px; font-weight: 800; }
+.d-top { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.facts div { background: var(--surface); padding: 9px 11px; display: grid; gap: 2px; }
+.facts span { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.facts b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.alertbox { border-radius: var(--r); padding: 10px 12px; font-size: 13px; display: grid; gap: 4px; }
+.alertbox.bad { background: var(--bad-soft); color: var(--bad); }
+.alertbox.warn { background: var(--warn-soft); color: var(--warn); }
+.alertbox.info { background: var(--info-soft); color: var(--info); }
+.alertbox.ok { background: var(--ok-soft); color: var(--ok); }
+.msg { white-space: pre-wrap; background: var(--surface-2); border: 1px dashed var(--line); border-radius: 6px; padding: 10px; font-size: 13px; }
+.hist { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.hist li { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto auto; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.hist li:last-child { border-bottom: 0; }
+.hist .x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 2px 6px; }
+.hist .x:hover { color: var(--bad); }
+details.card > summary { list-style: none; cursor: pointer; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary h2::after { content: " +"; color: var(--muted); font-weight: 600; }
+details.card[open] > summary h2::after { content: " –"; }
+
+.modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(10,15,20,.4); }
+.modal-in { width: min(560px, 100%); max-height: 90vh; overflow-y: auto; background: var(--bg); border-radius: 10px; border: 1px solid var(--line); padding: 18px; display: grid; gap: 14px; }
+.modal-in h2 { font-size: 18px; }
+#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 70; background: var(--fg); color: var(--surface); padding: 9px 16px; border-radius: 20px; font-weight: 500; font-size: 13px; max-width: calc(100% - 32px); }
+#toast.err { background: var(--bad); color: #fff; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 6px 10px; cursor: pointer; font-size: 12.5px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.ing-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.grp { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 10px 14px 4px; }
+@media (max-width: 560px) { .rows li { grid-template-columns: 1fr; } .rows .side { justify-content: flex-start; } .kpi .val { font-size: 22px; } }
+@media (prefers-reduced-motion: no-preference) { .drawer { animation: slide .18s ease-out; } @keyframes slide { from { transform: translateX(24px); opacity: .6; } } }
+</style>
+
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand"><span class="mark">TO</span><div><h1>Cartera Mayorista</h1><p id="hoy-lbl">Tomás Oberti Supplies</p></div></div>
+    <div class="top-actions">
+      <button class="btn" data-act="nuevo-ingreso">+ Ingreso</button>
+      <button class="btn" data-act="nueva-compra">+ Compra</button>
+      <button class="btn" data-act="mov-new" data-tipo="Entrega">+ Pago</button>
+      <button class="btn primary" data-act="nuevo-cliente">+ Cliente</button>
+    </div>
+  </div>
+  <nav class="wrap tabs" id="tabs" role="tablist">
+    <button data-tab="hoy" aria-selected="true">Hoy <span class="cnt" id="cnt-hoy" hidden></span></button>
+    <button data-tab="clientes" aria-selected="false">Clientes</button>
+    <button data-tab="cuentas" aria-selected="false">Cuentas corrientes</button>
+    <button data-tab="movimientos" aria-selected="false">Movimientos</button>
+    <button data-tab="recuperar" aria-selected="false">Recuperar</button>
+    <button data-tab="ingresos" aria-selected="false">Ingresos</button>
+    <button data-tab="resultados" aria-selected="false">Resultados</button>
+    <button data-tab="ajustes" aria-selected="false">Ajustes</button>
+  </nav>
+</header>
+<div id="banner" class="wrap" hidden><div class="banner" id="banner-t"></div></div>
+<main class="wrap" id="main">
+  <div id="tab-static"></div>
+  <div id="tab-dyn"><div class="card"><div class="empty">Cargando la cartera de clientes…</div></div></div>
+</main>
+<div id="scrim" hidden data-act="close"></div>
+<aside id="drawer" class="drawer" hidden aria-label="Ficha del cliente"><div class="drawer-in" id="drawer-in"></div></aside>
+<div id="modal" class="modal" hidden><div class="modal-in" id="modal-in"></div></div>
+<div id="toast" hidden></div>
+<datalist id="dl-todos"></datalist><datalist id="dl-cuenta"></datalist>
+
+<script>
+(() => {
+'use strict';
+// ---------- utilidades ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const DAY = 864e5;
+const pd = s => { if (!s) return null; const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const NOW = new Date();
+const TODAY = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
+const HOY = iso(TODAY);
+const addD = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const diff = (a, b) => Math.round((b - a) / DAY);
+const fd = s => { const d = typeof s === 'string' ? pd(s) : s; if (!d) return '—'; return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`; };
+const money = n => (n == null || isNaN(n)) ? '—' : '$' + Math.round(n).toLocaleString('es-AR');
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const slug = s => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+const byF = (a, b) => a.f < b.f ? -1 : a.f > b.f ? 1 : 0;
+const digits = t => String(t || '').replace(/\D/g, '');
+
+const CAMP = ['Activo', 'Dormido', 'Volver a mayorista', 'Prospecto', 'Sin campaña'];
+const ETAPA = ['', 'Sin contactar', 'Contactado', 'Interesado', 'Compró', 'Inactivo'];
+const PAGO = ['', 'Cuenta corriente', 'Transferencia', 'Efectivo', 'Mixto'];
+const COMO = ['', 'WhatsApp', 'Web', 'Visita de Tomás', 'Retira en local', 'Otro'];
+const ZONAS = ['', 'Buenos Aires (CABA/GBA)', 'Córdoba', 'Rosario', 'Santa Fe', 'Resto del país', 'Exterior'];
+const DEF = { minimo: 1000000, ventana: 30, activo: 45, riesgo: 90, dormido: 180, metaRecup: 15, metaVolver: 5, metaNuevos: 10, desde: '2026-11-01', hasta: '2027-02-15' };
+const TIPOS = '<option value="mayorista">Mayorista (con nosotros)</option><option value="minorista">Minorista</option><option value="web">Página web (minorista)</option>';
+const TIPO_LBL = { minorista: 'Minorista', web: 'Web' };
+const ESTADO_CLS = { 'Activo': 'ok', 'Frecuente': 'ok', 'En riesgo': 'warn', 'Dormido': 'sleep', 'Perdido': 'bad', 'Sin dato': '' };
+
+const FIRMA = 'Hola [Nombre], ¿cómo estás? Soy Pauli, de Tomás Oberti Supplies 😊\n';
+const TPL = [
+  { id: 'repo', camp: 'Activo', ver: 'Reposición', txt: FIRMA + '¿Cómo te fue con [PRODUCTO/MARCA] que llevaste la última vez? Imagino que ya te estarás quedando corto con algo. ¿Querés que te arme el pedido para reponer?' },
+  { id: 'nov', camp: 'Activo', ver: 'Novedad', txt: FIRMA + 'Te escribo porque nos entró [PRODUCTO/MARCA] y me acordé de vos, va bien con lo que venís usando. ¿Querés que te pase precios? Si te falta reponer algo más, lo sumamos al mismo envío.' },
+  { id: 'min', camp: 'Todas', ver: 'Completar el mínimo', txt: FIRMA + 'Te recuerdo que para mantener el precio mayorista te faltan [FALTA] para llegar al mínimo de [MINIMO] en 30 días (tenés hasta el [FECHA]). ¿Querés que te arme un pedido con lo que solés llevar?' },
+  { id: 'ding', camp: 'Dormido', ver: 'Con ingreso concreto', txt: FIRMA + '¿Cómo viene el laburo en el estudio?\nTe escribo porque esta semana nos entra [PRODUCTO/MARCA], que es lo que venías llevando. ¿Querés que te pase precios o te separo algo?' },
+  { id: 'drec', camp: 'Dormido', ver: 'Reconectar', txt: FIRMA + 'Hace rato no sabemos de vos, ¿cómo viene el estudio? ¿Seguís trabajando con las mismas marcas?\nContame y vemos si te podemos dar una mano con algo.' },
+  { id: 'dcor', camp: 'Dormido', ver: 'Corto y directo', txt: FIRMA + 'Estoy actualizando nuestra lista de clientes y quería saber si seguís con el estudio, así te sigo pasando novedades y precios. ¡Gracias!' },
+  { id: 'dvia', camp: 'Dormido', ver: 'Viaje de Tomás', txt: FIRMA + 'Tomás va a estar por [CIUDAD] el [FECHA], ¿te viene bien que pase por el estudio?' },
+  { id: 'vaho', camp: 'Volver a mayorista', ver: 'Mostrar el ahorro', txt: FIRMA + 'Vi que últimamente venís comprando por minorista y quería comentarte que, si juntás todo en un pedido mayorista, te sale bastante más barato. Si querés te armo una lista con lo que solés usar a precio mayorista y vemos juntos cómo llegar al mínimo. ¿Te la paso?' },
+  { id: 'vben', camp: 'Volver a mayorista', ver: 'Con beneficio (OK de Tomás)', txt: FIRMA + 'Para que vuelvas a aprovechar los precios mayoristas, en tu próximo pedido mayorista te ofrecemos [envío bonificado / combo Inkplay], hasta el [FECHA]. ¿Querés que te arme uno con lo que solés llevar?' },
+  { id: 'rec', camp: 'Todas', ver: 'Recordatorio', txt: 'Hola [Nombre], ¿cómo va? Te escribo de nuevo por si se te pasó el mensaje 😊 [Una línea con el motivo]. Cualquier cosa, acá estoy.' },
+];
+
+// ---------- estado ----------
+const S = { clientes: new Map(), ingresos: [], movs: [], cfg: { ...DEF }, cfgVer: false, loaded: { c: false, i: false, m: false },
+  cc: { q: '', ver: 'todos', sort: 'saldo' }, mv: { q: '', tipo: '', desde: '', hasta: '', viejos: false }, tab: 'hoy', open: null, dirty: false, tpl: null,
+  f: { q: '', camp: '', estado: '', pago: '', zona: '', alerta: '', sort: 'atencion' }, rec: { vel: '', camp: '' } };
+const D = new Map();
+let db = null;
+
+// ---------- cálculo por cliente ----------
+// palabras del producto que se cruzan con lo que usa / espera cada cliente
+const STOP = new Set(['de', 'del', 'la', 'las', 'los', 'el', 'con', 'para', 'por', 'y', 'en', 'un', 'una', 'mas', 'nuevo', 'nueva', 'nuevos', 'nuevas']);
+const kwsOf = s => [...new Set(norm(s).split(/[^a-z0-9]+/).filter(k => k.length >= 3 && !STOP.has(k)))];
+function ingresosActivos() {
+  const lim = addD(TODAY, -21);
+  return S.ingresos.filter(x => x.fecha && pd(x.fecha) >= lim).map(x => ({ ...x, kws: kwsOf(x.producto) }));
+}
+let ING = [];
+
+function derive(id, c) {
+  const cfg = S.cfg;
+  const compras = (c.compras || []).slice().sort(byF);
+  // solo las compras mayoristas hechas con nosotros; web y minorista no cuentan
+  const may = compras.filter(x => !x.t || x.t === 'mayorista');
+  const last = compras.at(-1), lastMay = may.at(-1);
+  const dias = last ? diff(pd(last.f), TODAY) : null;
+  const diasMay = lastMay ? diff(pd(lastMay.f), TODAY) : null;
+  let estado;
+  if (dias == null) estado = c.campana === 'Activo' ? 'Frecuente' : 'Sin dato';
+  else estado = dias <= cfg.activo ? 'Activo' : dias <= cfg.riesgo ? 'En riesgo' : dias <= cfg.dormido ? 'Dormido' : 'Perdido';
+  const conMonto = may.filter(x => x.m != null);
+  const u3 = conMonto.slice(-3);
+  const ticket = u3.length ? u3.reduce((s, x) => s + x.m, 0) / u3.length : null;
+  const total12 = conMonto.filter(x => diff(pd(x.f), TODAY) <= 365).reduce((s, x) => s + x.m, 0);
+  // pedidos: compras a menos de 7 días se cuentan como un mismo pedido
+  const ped = [];
+  for (const p of may) { const d = pd(p.f); if (!ped.length || diff(ped.at(-1), d) > 7) ped.push(d); }
+  const pp = ped.slice(-4);
+  const cadaCalc = pp.length >= 2 ? Math.round(diff(pp[0], pp.at(-1)) / (pp.length - 1)) : null;
+  const cada = Number(c.compraCada) || cadaCalc;
+  const prox = lastMay && cada ? addD(pd(lastMay.f), cada) : null;
+  const diasProx = prox ? diff(TODAY, prox) : null;
+
+  // mínimo: cada ciclo arranca con un pedido y tiene `ventana` días para sumar el mínimo;
+  // lo que compra dentro de un ciclo ya cumplido cuenta como complemento de ese ciclo
+  let cyc = null;
+  for (const p of may) {
+    const d = pd(p.f);
+    if (!cyc || d > cyc.fin) cyc = { ini: d, fin: addD(d, cfg.ventana), suma: 0, n: 0, done: false };
+    cyc.n++;
+    if (p.m == null) cyc.done = true; else cyc.suma += p.m;
+    if (cyc.suma >= cfg.minimo) cyc.done = true;
+  }
+  let minimo = null;
+  if (cyc && !cyc.done) {
+    const rest = diff(TODAY, cyc.fin);
+    const base = { falta: cfg.minimo - cyc.suma, suma: cyc.suma, n: cyc.n, ini: cyc.ini, vence: cyc.fin, rest };
+    if (rest >= 0) minimo = { estado: 'abierto', ...base };
+    else if (rest >= -30) minimo = { estado: 'vencido', ...base };
+  }
+
+  // recuperado: compra mayorista con nosotros después del primer contacto, tras más de `activo` días sin compra mayorista
+  const pc = c.primerContacto || null;
+  let recup = null;
+  if (pc) {
+    for (let i = 0; i < may.length; i++) {
+      const p = may[i];
+      if (p.f < pc) continue;
+      const prev = may[i - 1];
+      const gap = prev ? diff(pd(prev.f), pd(p.f)) : null;
+      if (gap == null || gap > cfg.activo) { recup = { f: p.f, m: p.m, gap }; }
+      break;
+    }
+  }
+  let volvio = null;
+  if (c.campana === 'Volver a mayorista' && pc) { const p = may.find(x => x.f >= pc); if (p) volvio = { f: p.f, m: p.m }; }
+  const primeraMay = may[0] || null;
+  const nuevo = c.nuevo && primeraMay ? primeraMay : null;
+
+  const contactos = (c.contactos || []).slice().sort(byF);
+  const ultContacto = contactos.at(-1)?.f || pc;
+  const recontactado = !!(contactos.length || pc);
+
+  // ingresos que le interesan
+  const hayEspera = norm(c.espera), hayUsa = norm([c.marcas, c.datos].join(' '));
+  const ings = [];
+  for (const g of ING) {
+    if (g.avisados && g.avisados[id]) continue;
+    const espera = g.kws.some(k => hayEspera.includes(k));
+    const usa = g.kws.some(k => hayUsa.includes(k));
+    if (espera || usa) ings.push({ g, espera });
+  }
+
+  // alertas
+  const al = [];
+  if (c.fechaProx) {
+    const r = diff(TODAY, pd(c.fechaProx));
+    if (r < 0) al.push({ k: 'seg', cls: 'bad', t: `Seguimiento vencido (${fd(c.fechaProx)})`, w: 100 });
+    else if (r === 0) al.push({ k: 'seg', cls: 'warn', t: 'Seguimiento hoy', w: 88 });
+    else if (r <= 3) al.push({ k: 'seg', cls: 'info', t: `Seguimiento en ${r} d`, w: 60 });
+  }
+  if (minimo && minimo.estado === 'abierto') al.push({ k: 'min', cls: 'bad', t: `Mínimo: faltan ${money(minimo.falta)}`, w: 95 });
+  if (c.pendiente) al.push({ k: 'pend', cls: 'warn', t: 'Pedido pendiente', w: 80 });
+  if (diasProx != null && diasMay != null && diasMay <= cfg.riesgo && diasProx <= 7 && diasProx >= -30) {
+    al.push({ k: 'repo', cls: diasProx < 0 ? 'warn' : 'info', t: diasProx < 0 ? `Reposición atrasada ${-diasProx} d` : diasProx === 0 ? 'Le toca comprar hoy' : `Le toca comprar en ${diasProx} d`, w: diasProx < 0 ? 75 : 55 });
+  }
+  for (const x of ings) al.push({ k: 'ing', cls: 'ok', t: (x.espera ? 'Lo espera: ' : 'Ingresó ') + x.g.producto, w: x.espera ? 78 : 50 });
+  const atencion = al.reduce((m, a) => Math.max(m, a.w), 0);
+
+  // prioridad para recuperar
+  const recent = diasMay != null && diasMay <= cfg.activo;
+  const pool = !recent && (dias != null || ['Dormido', 'Volver a mayorista'].includes(c.campana)) && c.campana !== 'Prospecto';
+  let score = 0; const why = [];
+  if (pool) {
+    const dd = diasMay;
+    if (dd == null) { score += c.campana === 'Volver a mayorista' ? 20 : 0; if (c.campana === 'Volver a mayorista') why.push('Compra minorista'); }
+    else if (dd <= cfg.riesgo) { score += 35; why.push(`${dd} días sin comprar`); }
+    else if (dd <= cfg.dormido) { score += 25; why.push(`${dd} días sin comprar`); }
+    else if (dd <= 365) { score += 12; why.push(`${Math.round(dd / 30)} meses sin comprar`); }
+    else { score += 4; why.push(`${Math.round(dd / 30)} meses sin comprar`); }
+    if (c.campana === 'Volver a mayorista' && dias != null && dias <= cfg.riesgo) { score += 10; why.push('Sigue comprando minorista'); }
+    const et = c.etapa || '';
+    if (et === 'Interesado') { score += 25; why.push('Interesado'); }
+    else if (et === 'Contactado') score += 10;
+    else if (et === 'Sin contactar' || et === '') { score += 8; why.push('Nunca contactado'); }
+    else if (et === 'Inactivo') { score -= 5; why.push('No respondió'); }
+    score += Math.min(ped.length, 3) * 4;
+    if (ped.length >= 3) why.push('Compraba seguido');
+    if (ticket >= 2e6) { score += 10; why.push(`Ticket ${money(ticket)}`); }
+    else if (ticket >= 1e6) score += 7;
+    else if (ticket > 0) score += 3;
+    if (ings.length) { score += 15; why.push('Hay ingreso de lo que usa'); }
+    if (c.espera) score += 5;
+    if (c.pendiente) { score += 15; why.push('Tiene pedido armado'); }
+    if (!c.tel) { score -= 15; why.push('Sin teléfono'); }
+    score = Math.max(0, Math.min(100, score));
+  }
+  const vel = !pool ? null : score >= 60 ? 'Rápida' : score >= 40 ? 'Media' : 'Lenta';
+
+  return { id, c, compras, may, last, lastMay, dias, diasMay, estado, ticket, total12, ped, cada, cadaCalc, prox, diasProx, minimo, recup, volvio, nuevo,
+    contactos, ultContacto, recontactado, ings, al: al.sort((a, b) => b.w - a.w), atencion, pool, score, why, vel };
+}
+
+function recompute() {
+  ING = ingresosActivos();
+  D.clear();
+  for (const [id, c] of S.clientes) D.set(id, derive(id, c));
+}
+const all = () => [...D.values()];
+const inPeriod = f => f && f >= S.cfg.desde && f <= S.cfg.hasta;
+
+// ---------- piezas de UI ----------
+const pill = (t, cls = '') => `<span class="pill ${cls}">${esc(t)}</span>`;
+const estadoPill = d => pill(d.estado, ESTADO_CLS[d.estado] || '');
+const waLink = c => c.tel ? `<a class="wa" href="https://wa.me/${digits(c.tel)}" target="_blank" rel="noopener">WhatsApp</a>` : `<span class="pill">Sin teléfono</span>`;
+const nm = d => `<button class="nm" data-open="${esc(d.id)}">${esc(d.c.nombre)}</button>`;
+const alertChips = (d, only) => `<span class="chips">${d.al.filter(a => !only || only.includes(a.k)).map(a => pill(a.t, a.cls)).join('')}</span>`;
+function list(items, fn, empty, max = 12, key) {
+  if (!items.length) return `<div class="empty">${empty}</div>`;
+  const showAll = S.expanded && S.expanded[key];
+  const shown = showAll ? items : items.slice(0, max);
+  let h = `<ul class="rows">${shown.map(fn).join('')}</ul>`;
+  if (items.length > max && key) h += `<div class="more"><button class="btn sm ghost" data-act="expand" data-key="${key}">${showAll ? 'Ver menos' : `Ver los ${items.length}`}</button></div>`;
+  return h;
+}
+const opts = (arr, sel) => arr.map(v => `<option value="${esc(v)}"${v === (sel ?? '') ? ' selected' : ''}>${esc(v || '—')}</option>`).join('');
+function card(title, hint, body, count) {
+  return `<section class="card"><div class="card-h"><h2>${esc(title)}${count != null ? `<span class="count">${count}</span>` : ''}</h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>${body}</section>`;
+}
+
+// ---------- pestaña Hoy ----------
+function kpis() {
+  const A = all();
+  const rec = A.filter(d => d.recup && inPeriod(d.recup.f)).length;
+  const vol = A.filter(d => d.volvio && inPeriod(d.volvio.f)).length;
+  const nue = A.filter(d => d.nuevo && inPeriod(d.nuevo.f)).length;
+  const rc = A.filter(d => d.recontactado && d.ultContacto && d.ultContacto >= S.cfg.desde);
+  const act = A.filter(d => d.diasMay != null && d.diasMay <= S.cfg.activo).length;
+  const tile = (l, v, meta) => `<div class="kpi"><span class="lbl">${l}</span><span class="val num">${v}${meta ? `<small> / ${meta}</small>` : ''}</span>${meta ? `<div class="bar"><i style="width:${Math.min(100, v / meta * 100)}%"></i></div>` : ''}</div>`;
+  return `<div class="kpis">${tile('Recuperados', rec, S.cfg.metaRecup)}${tile('Volvieron a mayorista', vol, S.cfg.metaVolver)}${tile('Clientes nuevos', nue, S.cfg.metaNuevos)}${tile('Recontactados', rc.length)}${tile('Compraron en 45 días', act)}</div>`;
+}
+function renderHoy() {
+  const A = all();
+  const seg = A.filter(d => d.al.some(a => a.k === 'seg')).sort((a, b) => (a.c.fechaProx < b.c.fechaProx ? -1 : 1));
+  const min = A.filter(d => d.minimo && d.minimo.estado === 'abierto').sort((a, b) => a.minimo.rest - b.minimo.rest);
+  const repo = A.filter(d => d.al.some(a => a.k === 'repo')).sort((a, b) => a.diasProx - b.diasProx);
+  const pend = A.filter(d => d.c.pendiente);
+  const ingN = ING.map(g => ({ g, n: A.filter(d => d.ings.some(x => x.g.id === g.id)).length })).filter(x => x.n);
+  const top = A.filter(d => d.pool && d.c.etapa !== 'Inactivo' && !d.c.fechaProx).sort((a, b) => b.score - a.score).slice(0, 8);
+  const urg = seg.filter(d => d.al.some(a => a.k === 'seg' && a.cls !== 'info')).length + min.length;
+  const cnt = $('#cnt-hoy'); cnt.hidden = !urg; cnt.textContent = urg;
+
+  const segRow = d => { const a = d.al.find(x => x.k === 'seg'); return `<li><div class="main">${nm(d)}<span class="sub">${esc(d.c.proxAccion || 'Sin acción anotada')} · ${esc(d.c.etapa || d.c.campana)}</span></div><div class="side">${pill(a.t, a.cls)}${waLink(d.c)}</div></li>`; };
+  const minRow = d => `<li><div class="main">${nm(d)}<span class="sub">Lleva ${money(d.minimo.suma)} en ${d.minimo.n} pedido${d.minimo.n > 1 ? 's' : ''} desde el ${fd(d.minimo.ini)}</span></div><div class="side">${pill(`Faltan ${money(d.minimo.falta)}`, 'bad')}${pill(d.minimo.rest === 0 ? 'Vence hoy' : `Vence en ${d.minimo.rest} d`, d.minimo.rest <= 5 ? 'warn' : '')}${waLink(d.c)}</div></li>`;
+  const repoRow = d => `<li><div class="main">${nm(d)}<span class="sub">Compra cada ${d.cada} d · última ${fd(d.lastMay.f)} · ticket ${money(d.ticket)}${d.c.marcas ? ' · ' + esc(d.c.marcas) : ''}</span></div><div class="side">${alertChips(d, ['repo'])}${waLink(d.c)}</div></li>`;
+  const pendRow = d => `<li><div class="main">${nm(d)}<span class="sub">${esc(d.c.pendiente)}</span></div><div class="side">${waLink(d.c)}</div></li>`;
+  const topRow = d => `<li><div class="main">${nm(d)}<span class="sub">${esc(d.why.slice(0, 3).join(' · '))}</span></div><div class="side">${pill(d.vel, d.vel === 'Rápida' ? 'ok' : d.vel === 'Media' ? 'info' : '')}${waLink(d.c)}</div></li>`;
+  const ingBody = ingN.length ? `<ul class="rows">${ingN.map(x => `<li><div class="main"><b>${esc(x.g.producto)}</b><span class="sub">Ingresó el ${fd(x.g.fecha)}</span></div><div class="side">${pill(`${x.n} por avisar`, 'ok')}<button class="btn sm" data-tab="ingresos">Avisar</button></div></li>`).join('')}</ul>` : `<div class="empty">Sin ingresos en las últimas 3 semanas. Cargá uno con <b>+ Ingreso</b> y la lista de a quién avisar se arma sola.</div>`;
+
+  $('#tab-dyn').innerHTML = kpis() + `<div class="grid2" style="margin-top:14px">` +
+    card('Seguimientos', 'Vencidos, hoy y próximos 3 días', list(seg, segRow, 'No hay seguimientos agendados para estos días.', 10, 'seg'), seg.length) +
+    card('Mínimo en curso', `Deben sumar ${money(S.cfg.minimo)} en ${S.cfg.ventana} días`, list(min, minRow, 'Nadie tiene un mínimo abierto.', 10, 'min'), min.length) +
+    card('Avisar ingresos', 'A quién le interesa lo que llegó', ingBody, ingN.reduce((s, x) => s + x.n, 0)) +
+    card('Les toca comprar', 'Según cada cuánto compra cada uno', list(repo, repoRow, 'Ningún cliente tiene la reposición cerca.', 10, 'repo'), repo.length) +
+    (pend.length ? card('Pedidos pendientes', 'Armados y sin cerrar', list(pend, pendRow, ''), pend.length) : '') +
+    card('Para recuperar primero', 'Los que vuelven más rápido', list(top, topRow, 'No hay clientes para recuperar.') + `<div class="more"><button class="btn sm" data-tab="recuperar">Ver el ranking completo</button></div>`, null) +
+    `</div>`;
+}
+
+// ---------- pestaña Clientes ----------
+function renderClientesStatic() {
+  const f = S.f;
+  const zonas = [...new Set([...ZONAS, ...[...S.clientes.values()].map(c => c.zona || '')])];
+  $('#tab-static').innerHTML = `<div class="filters">
+    <input type="search" id="f-q" list="dl-todos" autocomplete="off" placeholder="Buscar por nombre, marca, nota o teléfono" value="${esc(f.q)}">
+    <select id="f-camp" aria-label="Campaña"><option value="">Todas las campañas</option>${opts(CAMP.slice(), f.camp).replace('<option value="">—</option>', '')}</select>
+    <select id="f-estado" aria-label="Estado"><option value="">Todos los estados</option>${['Activo', 'En riesgo', 'Dormido', 'Perdido', 'Frecuente', 'Sin dato'].map(v => `<option${v === f.estado ? ' selected' : ''}>${v}</option>`).join('')}</select>
+    <select id="f-alerta" aria-label="Alerta"><option value="">Con o sin alerta</option>${[['any', 'Con alguna alerta'], ['seg', 'Seguimiento'], ['min', 'Mínimo en curso'], ['repo', 'Reposición'], ['ing', 'Ingreso para avisar'], ['pend', 'Pedido pendiente']].map(([v, t]) => `<option value="${v}"${v === f.alerta ? ' selected' : ''}>${t}</option>`).join('')}</select>
+    <select id="f-pago" aria-label="Pago"><option value="">Todas las formas de pago</option>${PAGO.slice(1).map(v => `<option${v === f.pago ? ' selected' : ''}>${v}</option>`).join('')}<option value="__none"${f.pago === '__none' ? ' selected' : ''}>Pago sin cargar</option></select>
+    <select id="f-zona" aria-label="Zona"><option value="">Todas las zonas</option>${zonas.filter(Boolean).map(v => `<option${v === f.zona ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select>
+    <select id="f-sort" aria-label="Orden">${[['atencion', 'Orden: atención'], ['nombre', 'Orden: nombre'], ['dias', 'Orden: días sin comprar'], ['ticket', 'Orden: ticket'], ['prox', 'Orden: próxima compra'], ['total', 'Orden: compras 12 meses']].map(([v, t]) => `<option value="${v}"${v === f.sort ? ' selected' : ''}>${t}</option>`).join('')}</select>
+  </div>`;
+}
+function filtered() {
+  const f = S.f, q = norm(f.q);
+  let A = all().filter(d => {
+    const c = d.c;
+    if (f.camp && c.campana !== f.camp) return false;
+    if (f.estado && d.estado !== f.estado) return false;
+    if (f.pago === '__none' ? c.pago : (f.pago && c.pago !== f.pago)) return false;
+    if (f.zona && c.zona !== f.zona) return false;
+    if (f.alerta === 'any' ? !d.al.length : (f.alerta && !d.al.some(a => a.k === f.alerta))) return false;
+    if (q && !norm([c.nombre, c.apodo, c.marcas, c.espera, c.datos, c.notas, c.tel, c.facturar].join(' ')).includes(q)) return false;
+    return true;
+  });
+  const s = f.sort, nn = v => v == null ? Infinity : v;
+  A.sort(s === 'nombre' ? (a, b) => a.c.nombre.localeCompare(b.c.nombre)
+    : s === 'dias' ? (a, b) => nn(a.dias) - nn(b.dias)
+    : s === 'ticket' ? (a, b) => (b.ticket || 0) - (a.ticket || 0)
+    : s === 'prox' ? (a, b) => nn(a.diasProx) - nn(b.diasProx)
+    : s === 'total' ? (a, b) => b.total12 - a.total12
+    : (a, b) => b.atencion - a.atencion || nn(a.dias) - nn(b.dias));
+  return A;
+}
+function renderClientes() {
+  const A = filtered();
+  if (!S.clientes.size) { $('#tab-dyn').innerHTML = `<div class="card"><div class="empty">Todavía no hay clientes cargados. Tocá <b>+ Cliente</b> para sumar el primero.</div></div>`; return; }
+  const rows = A.map(d => { const c = d.c; return `<tr class="click" data-open="${esc(d.id)}">
+    <td><b>${esc(c.nombre)}</b><div class="sub">${esc(c.zona || 'Zona sin cargar')}${c.comoCompra ? ' · ' + esc(c.comoCompra) : ''}</div></td>
+    <td>${esc(c.campana)}<div class="sub">${esc(c.etapa || '—')}</div></td>
+    <td>${estadoPill(d)}</td>
+    <td class="n">${d.dias ?? '—'}</td>
+    <td class="n">${d.last ? fd(d.last.f) : '—'}</td>
+    <td class="n">${money(d.ticket)}</td>
+    <td class="n">${d.cada ? d.cada + ' d' : '—'}</td>
+    <td class="n">${d.prox ? fd(d.prox) : '—'}</td>
+    <td>${esc(c.descuento || '—')}${c.aplicaEn && c.aplicaEn !== 'General' ? `<div class="sub">${esc(c.aplicaEn)}</div>` : ''}</td>
+    <td>${c.pago ? esc(c.pago) : '<span class="muted">—</span>'}</td>
+    <td>${alertChips(d)}</td></tr>`; }).join('');
+  $('#tab-dyn').innerHTML = `<section class="card"><div class="card-h"><h2>Clientes<span class="count">${A.length} de ${S.clientes.size}</span></h2><span class="hint">Tocá un cliente para ver su ficha, cargar compras y contactos</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Cliente</th><th>Campaña / etapa</th><th>Estado</th><th style="text-align:right">Días</th><th style="text-align:right">Últ. compra</th><th style="text-align:right">Ticket</th><th style="text-align:right">Cada</th><th style="text-align:right">Próx. compra</th><th>Dto.</th><th>Pago</th><th>Alertas</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="11" class="empty">Ningún cliente coincide con estos filtros.</td></tr>`}</tbody></table></div></section>`;
+}
+
+// ---------- pestaña Recuperar ----------
+function renderRecuperarStatic() {
+  const r = S.rec;
+  $('#tab-static').innerHTML = `<div class="filters"><span class="seg" role="group" aria-label="Velocidad">${[['', 'Todos'], ['Rápida', 'Rápida'], ['Media', 'Media'], ['Lenta', 'Lenta']].map(([v, t]) => `<button data-act="rec-vel" data-v="${v}" aria-pressed="${r.vel === v}">${t}</button>`).join('')}</span>
+    <select id="r-camp" aria-label="Campaña"><option value="">Todas las campañas</option>${CAMP.map(v => `<option${v === r.camp ? ' selected' : ''}>${v}</option>`).join('')}</select>
+    <span class="sub">El puntaje suma: hace cuánto dejó de comprar, si respondió, cuántos pedidos hizo, su ticket, si llegó algo que usa y si tiene teléfono.</span></div>`;
+}
+function renderRecuperar() {
+  const r = S.rec;
+  const A = all().filter(d => d.pool && (!r.vel || d.vel === r.vel) && (!r.camp || d.c.campana === r.camp)).sort((a, b) => b.score - a.score);
+  const row = d => `<li><div class="main">${nm(d)}<span class="sub">${esc(d.c.campana)} · ${esc(d.c.etapa || 'Sin etapa')} · última mayorista ${d.lastMay ? fd(d.lastMay.f) : '—'} · ticket ${money(d.ticket)}${d.c.marcas ? ' · ' + esc(d.c.marcas) : ''}</span><span class="chips">${d.why.map(w => pill(w)).join('')}</span></div>
+    <div class="side"><span class="score"><span class="bar"><i style="width:${d.score}%"></i></span><b>${d.score}</b></span>${pill(d.vel, d.vel === 'Rápida' ? 'ok' : d.vel === 'Media' ? 'info' : '')}${waLink(d.c)}</div></li>`;
+  $('#tab-dyn').innerHTML = card('Ranking para recuperar', 'De mayor a menor chance de volver rápido', list(A, row, 'Ningún cliente para recuperar con este filtro.', 40, 'recall'), A.length);
+}
+
+// ---------- pestaña Ingresos ----------
+function renderIngresosStatic() {
+  $('#tab-static').innerHTML = card('Cargar un ingreso de mercadería', 'Separá varios productos con coma', `<div class="card-b"><form class="grid" data-form="ingreso">
+    <label class="f">Fecha<input type="date" id="i-fecha" name="fecha" value="${HOY}" required></label>
+    <label class="f full">Producto o marca<input id="i-prod" name="producto" placeholder="Ej.: Inkplay Butter, VICE, cubregrip" required></label>
+    <label class="f full">Nota (opcional)<input id="i-nota" name="nota" placeholder="Cantidad, precio, si es preventa…"></label>
+    <div class="form-actions"><button class="btn primary">Cargar ingreso</button></div></form></div>`);
+}
+function renderIngresos() {
+  const lista = S.ingresos.slice().sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  if (!lista.length) { $('#tab-dyn').innerHTML = `<div class="card"><div class="empty">Todavía no hay ingresos cargados. Cuando llegue mercadería, cargala arriba y acá aparece a quién avisarle: primero los que la esperan, después los que usan esa marca.</div></div>`; return; }
+  const activos = new Set(ING.map(g => g.id));
+  $('#tab-dyn').innerHTML = lista.map(g => {
+    const kws = kwsOf(g.producto);
+    const match = all().map(d => {
+      const e = kws.some(k => norm(d.c.espera).includes(k)), u = kws.some(k => norm([d.c.marcas, d.c.datos].join(' ')).includes(k));
+      return (e || u) ? { d, e } : null;
+    }).filter(Boolean);
+    const av = g.avisados || {};
+    const pendientes = match.filter(x => !av[x.d.id]);
+    const avisados = match.filter(x => av[x.d.id]);
+    const row = x => `<li><div class="main">${nm(x.d)}<span class="sub">${x.e ? 'Lo espera: ' + esc(x.d.c.espera) : 'Usa: ' + esc(x.d.c.marcas)}</span></div><div class="side">${estadoPill(x.d)}${waLink(x.d.c)}<button class="btn sm" data-act="copy-ing" data-ing="${esc(g.id)}" data-cid="${esc(x.d.id)}">Copiar mensaje</button><button class="btn sm primary" data-act="avisado" data-ing="${esc(g.id)}" data-cid="${esc(x.d.id)}">Avisado</button></div></li>`;
+    const espera = pendientes.filter(x => x.e).sort((a, b) => b.d.score - a.d.score), usa = pendientes.filter(x => !x.e).sort((a, b) => (a.d.dias ?? 999) - (b.d.dias ?? 999));
+    return `<section class="card"><div class="card-h"><div class="ing-head" style="flex:1"><h2>${esc(g.producto)}<span class="count">${pendientes.length} por avisar · ${avisados.length} avisados</span></h2><span class="hint">Ingresó el ${fd(g.fecha)}${g.nota ? ' · ' + esc(g.nota) : ''}${activos.has(g.id) ? '' : ' · ya no aparece en alertas'}</span></div><button class="btn sm ghost" data-act="del-ing" data-ing="${esc(g.id)}">Borrar</button></div>
+      ${espera.length ? `<div class="grp">Lo están esperando</div><ul class="rows">${espera.map(row).join('')}</ul>` : ''}
+      ${usa.length ? `<div class="grp">Usan esa marca</div><ul class="rows">${usa.map(row).join('')}</ul>` : ''}
+      ${!pendientes.length ? `<div class="empty">${match.length ? 'Ya avisaste a todos.' : 'Ningún cliente tiene cargada esta marca en "Marcas que usa" o "Le interesa". Revisá cómo está escrita.'}</div>` : ''}
+      ${avisados.length ? `<div class="grp">Avisados</div><div class="card-b chips">${avisados.map(x => pill(x.d.c.nombre + ' · ' + fd(av[x.d.id]))).join('')}</div>` : ''}</section>`;
+  }).join('');
+}
+
+// ---------- pestaña Resultados ----------
+function renderResultados() {
+  const A = all();
+  const rec = A.filter(d => d.recup).sort((a, b) => (a.recup.f < b.recup.f ? 1 : -1));
+  const vol = A.filter(d => d.volvio).sort((a, b) => (a.volvio.f < b.volvio.f ? 1 : -1));
+  const nue = A.filter(d => d.nuevo).sort((a, b) => (a.nuevo.f < b.nuevo.f ? 1 : -1));
+  const rc = A.filter(d => d.recontactado).sort((a, b) => (a.ultContacto < b.ultContacto ? 1 : -1));
+  const res = d => d.recup || d.volvio ? ['Recuperado', 'ok'] : (d.lastMay && d.lastMay.f >= (d.c.primerContacto || '9')) ? ['Compró', 'ok'] : d.c.etapa === 'Interesado' ? ['Interesado', 'info'] : d.c.etapa === 'Inactivo' ? ['Sin respuesta', 'bad'] : ['Esperando respuesta', 'warn'];
+  const rcCounts = rc.reduce((m, d) => { const r = res(d)[0]; m[r] = (m[r] || 0) + 1; return m; }, {});
+  const recRow = d => `<li><div class="main">${nm(d)}<span class="sub">Volvió el ${fd(d.recup.f)} con ${money(d.recup.m)}${d.recup.gap ? ` después de ${d.recup.gap} días sin comprar` : ''}</span></div><div class="side">${pill(d.c.campana)}</div></li>`;
+  const volRow = d => `<li><div class="main">${nm(d)}<span class="sub">Compra mayorista el ${fd(d.volvio.f)} por ${money(d.volvio.m)}</span></div></li>`;
+  const nueRow = d => `<li><div class="main">${nm(d)}<span class="sub">Primera compra mayorista ${fd(d.nuevo.f)} · ${money(d.nuevo.m)}</span></div></li>`;
+  const rcRow = d => { const [t, cls] = res(d); return `<li><div class="main">${nm(d)}<span class="sub">Último contacto ${fd(d.ultContacto)} · ${esc(d.c.campana)}${d.c.proxAccion ? ' · ' + esc(d.c.proxAccion) : ''}</span></div><div class="side">${pill(t, cls)}</div></li>`; };
+  // embudo por campaña
+  const et = ['Sin contactar', 'Contactado', 'Interesado', 'Compró', 'Inactivo', ''];
+  const fun = CAMP.map(cp => { const L = A.filter(d => d.c.campana === cp); return L.length ? `<tr><td><b>${cp}</b></td><td class="n">${L.length}</td>${et.map(e => `<td class="n">${L.filter(d => (d.c.etapa || '') === e).length || '·'}</td>`).join('')}</tr>` : ''; }).join('');
+  $('#tab-static').innerHTML = '';
+  $('#tab-dyn').innerHTML = kpis() + `<p class="sub" style="margin:8px 0 0">Metas del ${fd(S.cfg.desde)} al ${fd(S.cfg.hasta)}. <b>Recuperado</b>: hizo una compra mayorista con nosotros después de que lo contactamos, tras más de ${S.cfg.activo} días sin compra mayorista. Las compras por la web no cuentan.</p>
+    <div class="grid2" style="margin-top:14px">
+    ${card('Clientes recuperados', 'Toda la historia', list(rec, recRow, 'Todavía no hay recuperados. Se suman solos cuando un cliente contactado vuelve a comprar.', 15, 'rec'), rec.length)}
+    ${card('Recontactados', Object.entries(rcCounts).map(([k, v]) => `${k}: ${v}`).join(' · '), list(rc, rcRow, 'Nadie fue contactado todavía.', 15, 'rc'), rc.length)}
+    ${card('Volvieron a mayorista', '', list(vol, volRow, 'Ninguno de la campaña "Volver a mayorista" hizo una compra mayorista después del contacto.', 10, 'vol'), vol.length)}
+    ${card('Clientes nuevos', 'Marcados como nuevos en su ficha', list(nue, nueRow, 'No hay clientes nuevos con compra mayorista.', 10, 'nue'), nue.length)}
+    </div>
+    <section class="card" style="margin-top:14px"><div class="card-h"><h2>Clientes por campaña y etapa</h2></div><div class="tbl-wrap"><table><thead><tr><th>Campaña</th><th style="text-align:right">Total</th>${et.map(e => `<th style="text-align:right">${e || 'Sin etapa'}</th>`).join('')}</tr></thead><tbody>${fun}</tbody></table></div></section>`;
+}
+
+// ---------- pestaña Ajustes ----------
+function renderAjustes() {
+  const c = S.cfg;
+  const n = (id, l, v, extra = '') => `<label class="f">${l}<input type="number" name="${id}" value="${esc(v)}" min="0" ${extra}></label>`;
+  $('#tab-static').innerHTML = '';
+  $('#tab-dyn').innerHTML = card('Reglas de la cartera', 'Los cambios se aplican para todos', `<div class="card-b"><form class="grid" data-form="cfg">
+    ${n('minimo', 'Compra mínima mayorista ($)', c.minimo, 'step="1000"')}${n('ventana', 'Días para completar el mínimo', c.ventana)}
+    ${n('activo', 'Activo hasta (días sin comprar)', c.activo)}${n('riesgo', 'En riesgo hasta', c.riesgo)}${n('dormido', 'Dormido hasta (después: Perdido)', c.dormido)}
+    ${n('metaRecup', 'Meta: recuperados', c.metaRecup)}${n('metaVolver', 'Meta: volver a mayorista', c.metaVolver)}${n('metaNuevos', 'Meta: clientes nuevos', c.metaNuevos)}
+    <label class="f">Metas desde<input type="date" name="desde" value="${esc(c.desde)}"></label><label class="f">Metas hasta<input type="date" name="hasta" value="${esc(c.hasta)}"></label>
+    <div class="form-actions"><button class="btn primary">Guardar reglas</button></div></form></div>`) +
+    card('Mensajes de WhatsApp', 'Los que tienen beneficio necesitan el OK de Tomás', `<ul class="rows">${TPL.map(t => `<li><div class="main"><b>${esc(t.camp)} · ${esc(t.ver)}</b><div class="msg">${esc(t.txt)}</div></div><div class="side"><button class="btn sm" data-act="copy-tpl" data-tpl="${t.id}">Copiar</button></div></li>`).join('')}</ul>`);
+}
+
+// ---------- cuentas corrientes ----------
+// Cada movimiento suma o resta al saldo: Deuda y Saldo inicial suman, Entrega resta, Ajuste va con su signo.
+const money2 = n => (n == null || isNaN(n)) ? '—' : (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('es-AR', Number.isInteger(Math.round(n * 100) / 100) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Deuda según días sin entregar: menos de 30 sin color, 30 a 60 amarillo, más de 60 rojo
+const atrasoCls = d => d == null || d < 30 ? '' : d <= 60 ? 'warn' : 'bad';
+const saldoTxt = (s, dias) => Math.abs(s) < 0.005 ? pill('Sin saldo') : s > 0 ? `<b class="mono" style="color:${atrasoCls(dias) ? 'var(--' + atrasoCls(dias) + ')' : 'var(--fg)'}">${money2(s)}</b>` : `<b class="mono" style="color:var(--ok)">${money2(-s)} a favor</b>`;
+const MOV_TIPOS = ['Deuda', 'Entrega', 'Ajuste'];
+const MOV_CLS = { 'Deuda': 'bad', 'Entrega': 'ok', 'Ajuste': 'info', 'Saldo inicial': '' };
+const MEDIOS = ['', 'Efectivo', 'Transferencia', 'Cheque', 'Otro'];
+// Los movimientos anteriores a esta fecha siguen sumando al saldo, pero no se muestran salvo que se pida
+const MOV_DESDE = '2026-06-01';
+const movSort = (a, b) => (a.f < b.f ? 1 : a.f > b.f ? -1 : String(b.creado || '').localeCompare(String(a.creado || '')));
+const nmId = (id, c) => `<button class="nm" data-open="${esc(id)}">${esc(c ? c.nombre : 'Cliente borrado')}</button>`;
+function ccData() {
+  const by = new Map();
+  for (const m of S.movs) {
+    const r = by.get(m.cid) || { saldo: 0, n: 0, ultPago: null, ultMov: null, movs: [] };
+    r.saldo += Number(m.monto) || 0; r.n++; r.movs.push(m);
+    if (m.tipo === 'Entrega' && (!r.ultPago || m.f > r.ultPago)) r.ultPago = m.f;
+    if (!r.ultMov || m.f > r.ultMov) r.ultMov = m.f;
+    by.set(m.cid, r);
+  }
+  const rows = [];
+  for (const [id, c] of S.clientes) {
+    const r = by.get(id);
+    if (!c.cc && !r) continue;
+    const x = r || { saldo: 0, n: 0, ultPago: null, ultMov: null, movs: [] };
+    x.saldo = Math.round(x.saldo * 100) / 100;
+    // sin ninguna entrega, cuenta desde el primer movimiento
+    rows.push({ id, c, ...x, diasPago: x.ultPago ? diff(pd(x.ultPago), TODAY) : x.movs.length ? diff(pd(x.movs.reduce((a, m) => m.f < a ? m.f : a, x.movs[0].f)), TODAY) : null });
+  }
+  return rows;
+}
+const ccOf = id => ccData().find(r => r.id === id) || null;
+function renderCCStatic() {
+  const f = S.cc;
+  $('#tab-static').innerHTML = `<div class="filters">
+    <input type="search" id="cc-q" list="dl-cuenta" autocomplete="off" placeholder="Buscar por nombre o código" value="${esc(f.q)}">
+    <span class="seg" role="group" aria-label="Mostrar">${[['deuda', 'Con deuda'], ['favor', 'A favor'], ['todos', 'Todos']].map(([v, t]) => `<button data-act="cc-ver" data-v="${v}" aria-pressed="${f.ver === v}">${t}</button>`).join('')}</span>
+    <select id="cc-sort" aria-label="Orden">${[['saldo', 'Orden: mayor saldo'], ['codigo', 'Orden: código'], ['nombre', 'Orden: nombre'], ['pago', 'Orden: más días sin pagar']].map(([v, t]) => `<option value="${v}"${v === f.sort ? ' selected' : ''}>${t}</option>`).join('')}</select>
+    <button class="btn primary" data-act="mov-new" data-tipo="Entrega">+ Pago</button><button class="btn" data-act="mov-new" data-tipo="Deuda">+ Venta a cuenta</button>
+  </div>`;
+}
+function renderCC() {
+  const R = ccData(), f = S.cc, q = norm(f.q);
+  const deben = R.filter(r => r.saldo > 0.005), favor = R.filter(r => r.saldo < -0.005);
+  const mes = HOY.slice(0, 7);
+  const cobrado = S.movs.filter(m => m.tipo === 'Entrega' && String(m.f).startsWith(mes)).reduce((s, m) => s - (Number(m.monto) || 0), 0);
+  const tile = (l, v, sub) => `<div class="kpi"><span class="lbl">${l}</span><span class="val num">${v}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
+  let L = R.filter(r => (f.ver === 'deuda' ? r.saldo > 0.005 : f.ver === 'favor' ? r.saldo < -0.005 : true) && (!q || norm(r.c.nombre + ' ' + (r.c.codigo ?? '')).includes(q)));
+  const nn = v => v == null ? -1 : v;
+  L.sort(f.sort === 'codigo' ? (a, b) => (a.c.codigo ?? 1e9) - (b.c.codigo ?? 1e9) : f.sort === 'nombre' ? (a, b) => a.c.nombre.localeCompare(b.c.nombre) : f.sort === 'pago' ? (a, b) => nn(b.diasPago) - nn(a.diasPago) || b.saldo - a.saldo : (a, b) => b.saldo - a.saldo);
+  const rows = L.map(r => `<tr class="click" data-open="${esc(r.id)}">
+    <td class="n">${r.c.codigo ?? '—'}</td>
+    <td><b>${esc(r.c.nombre)}</b><div class="sub">${esc(r.c.zona || '')}</div></td>
+    <td class="n">${saldoTxt(r.saldo, r.diasPago)}</td>
+    <td>${esc(r.c.descuento || '—')}</td>
+    <td class="n">${r.ultPago ? fd(r.ultPago) : '—'}</td>
+    <td class="n">${r.saldo > 0.005 && r.diasPago != null ? (atrasoCls(r.diasPago) ? pill(r.diasPago + ' d', atrasoCls(r.diasPago)) : r.diasPago + ' d') : '—'}</td>
+    <td class="n">${r.n}</td>
+    <td><button class="btn sm" data-act="mov-new" data-tipo="Entrega" data-cid="${esc(r.id)}">+ Pago</button></td></tr>`).join('');
+  $('#tab-dyn').innerHTML = `<div class="kpis">${tile('Total adeudado', money2(deben.reduce((s, r) => s + r.saldo, 0)), `${deben.length} clientes deben`)}${tile('Saldos a favor', money2(-favor.reduce((s, r) => s + r.saldo, 0)), `${favor.length} clientes`)}${tile('Cobrado este mes', money2(cobrado), 'Entregas cargadas')}${tile('Clientes a cuenta', R.length)}</div>
+    <section class="card" style="margin-top:14px"><div class="card-h"><h2>Cuentas corrientes<span class="count">${L.length} de ${R.length}</span></h2><span class="hint">Días sin entregar: 30 a 60 en amarillo, más de 60 en rojo. Tocá un cliente para ver su cuenta</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th style="text-align:right">Cód.</th><th>Cliente</th><th style="text-align:right">Saldo</th><th>Dto.</th><th style="text-align:right">Último pago</th><th style="text-align:right">Sin pagar</th><th style="text-align:right">Movs.</th><th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="8" class="empty">${R.length ? 'Ningún cliente coincide con este filtro.' : 'Todavía no hay clientes con cuenta corriente. Marcalo en el perfil del cliente o cargá un movimiento.'}</td></tr>`}</tbody></table></div></section>`;
+}
+function renderMovStatic() {
+  const f = S.mv;
+  $('#tab-static').innerHTML = `<div class="filters">
+    <input type="search" id="mv-q" list="dl-cuenta" autocomplete="off" placeholder="Buscar por cliente, código, comprobante u observación" value="${esc(f.q)}">
+    <select id="mv-tipo" aria-label="Tipo"><option value="">Todos los tipos</option>${[...MOV_TIPOS, 'Saldo inicial'].map(v => `<option${v === f.tipo ? ' selected' : ''}>${v}</option>`).join('')}</select>
+    <label class="sub">Desde <input type="date" id="mv-desde" value="${esc(f.desde)}"></label><label class="sub">Hasta <input type="date" id="mv-hasta" value="${esc(f.hasta)}"></label>
+    <label class="sub"><input type="checkbox" id="mv-viejos"${f.viejos ? ' checked' : ''}> Ver anteriores a 06/26</label>
+    <button class="btn primary" data-act="mov-new" data-tipo="Entrega">+ Pago</button><button class="btn" data-act="mov-new" data-tipo="Deuda">+ Venta a cuenta</button>
+  </div>`;
+}
+function renderMov() {
+  const f = S.mv, q = norm(f.q);
+  const L = S.movs.filter(m => {
+    if (!f.viejos && m.f < MOV_DESDE) return false;
+    if (f.tipo && m.tipo !== f.tipo) return false;
+    if (f.desde && m.f < f.desde) return false;
+    if (f.hasta && m.f > f.hasta) return false;
+    if (q) { const c = S.clientes.get(m.cid); if (!norm([c && c.nombre, c && c.codigo, m.comp, m.obs, m.medio].join(' ')).includes(q)) return false; }
+    return true;
+  }).sort(movSort);
+  const sum = t => L.filter(m => m.tipo === t).reduce((s, m) => s + (Number(m.monto) || 0), 0);
+  const max = S.expanded && S.expanded.movs ? L.length : 200;
+  const rows = L.slice(0, max).map(m => { const c = S.clientes.get(m.cid); return `<tr>
+    <td class="n">${fd(m.f)}</td><td class="n">${c && c.codigo != null ? c.codigo : '—'}</td><td>${nmId(m.cid, c)}</td>
+    <td>${esc(m.comp || '')}</td><td>${pill(m.tipo, MOV_CLS[m.tipo] || '')}</td><td class="n">${money2(m.monto)}</td>
+    <td>${esc(m.medio || '')}</td><td><input class="obs-in" data-id="${esc(m.id)}" value="${esc(m.obs || '')}" placeholder="Agregar…" aria-label="Observaciones" title="Tocá para editar. Enter guarda, Esc cancela"></td>
+    <td><button class="btn sm ghost" data-act="del-mov" data-id="${esc(m.id)}" aria-label="Borrar movimiento">✕</button></td></tr>`; }).join('');
+  const tile = (l, v) => `<div class="kpi"><span class="lbl">${l}</span><span class="val num">${v}</span></div>`;
+  $('#tab-dyn').innerHTML = `<div class="kpis">${tile('Ventas a cuenta', money2(sum('Deuda')))}${tile('Entregas', money2(-sum('Entrega')))}${tile('Ajustes', money2(sum('Ajuste')))}${tile('Saldo del período', money2(L.reduce((s, m) => s + (Number(m.monto) || 0), 0)))}</div>
+    <section class="card" style="margin-top:14px"><div class="card-h"><h2>Movimientos<span class="count">${L.length}</span></h2><span class="hint">${f.viejos ? 'Mostrando todo el historial' : `Desde junio 2026; ${S.movs.filter(m => m.f < MOV_DESDE).length} anteriores ocultos, pero suman al saldo`}. Deuda suma, Entrega resta</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th style="text-align:right">Fecha</th><th style="text-align:right">Cód.</th><th>Cliente</th><th>Fact. o NV</th><th>Tipo</th><th style="text-align:right">Monto</th><th>Medio</th><th>Observaciones</th><th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="9" class="empty">${S.movs.length ? 'Ningún movimiento coincide con estos filtros.' : 'Todavía no hay movimientos. Cargá un pago o una venta a cuenta con los botones de arriba.'}</td></tr>`}</tbody></table></div>
+    ${L.length > 200 ? `<div class="more"><button class="btn sm ghost" data-act="expand" data-key="movs">${max === L.length ? 'Ver menos' : `Ver los ${L.length}`}</button></div>` : ''}</section>`;
+}
+function ccLabel(id, c) { return (c.codigo != null && c.codigo !== '' ? c.codigo + ' · ' : '') + c.nombre; }
+function modalMov(cid, tipo) {
+  const ents = [...S.clientes.entries()].sort((a, b) => (b[1].cc ? 1 : 0) - (a[1].cc ? 1 : 0) || (a[1].codigo ?? 1e9) - (b[1].codigo ?? 1e9) || a[1].nombre.localeCompare(b[1].nombre));
+  const c = cid ? S.clientes.get(cid) : null;
+  const t = MOV_TIPOS.includes(tipo) ? tipo : 'Entrega';
+  openModal(`<h2>${t === 'Entrega' ? 'Registrar pago' : t === 'Deuda' ? 'Registrar venta a cuenta' : 'Registrar movimiento'}</h2><form class="grid" data-form="mov">
+    <label class="f full">Cliente<input name="cliente" list="dl-cc" required autocomplete="off" placeholder="Código o nombre" value="${c ? esc(ccLabel(cid, c)) : ''}"></label><datalist id="dl-cc">${ents.map(([id, x]) => `<option value="${esc(ccLabel(id, x))}">`).join('')}</datalist>
+    <label class="f">Fecha<input type="date" name="f" value="${HOY}" required></label>
+    <label class="f">Tipo<select name="tipo">${MOV_TIPOS.map(v => `<option${v === t ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
+    <label class="f">Monto ($)<input type="number" name="monto" step="0.01" required placeholder="500000"></label>
+    <label class="f">Medio de pago<select name="medio">${opts(MEDIOS, '')}</select></label>
+    <label class="f full">Factura o NV (opcional)<input name="comp" placeholder="Ej.: COT-11-574"></label>
+    <label class="f full">Observaciones (opcional)<input name="obs" placeholder="Ej.: entrega al paraguayo"></label>
+    <p class="sub full" style="margin:0">Deuda suma al saldo y Entrega lo resta: cargá el monto sin signo. En Ajuste, un monto negativo resta y uno positivo suma.</p>
+    <div class="form-actions"><button type="button" class="btn" data-act="close-modal">Cancelar</button><button class="btn primary">Guardar</button></div></form>`);
+  const m = $('#modal-in [name="monto"]'); if (c && m) m.focus();
+}
+function findCliente(txt) {
+  const v = norm(txt).trim(); if (!v) return null;
+  for (const [id, c] of S.clientes) if (norm(ccLabel(id, c)) === v || norm(c.nombre) === v) return [id, c];
+  const cod = v.match(/^(\d+)\b/);
+  if (cod) for (const [id, c] of S.clientes) if (String(c.codigo) === cod[1]) return [id, c];
+  return null;
+}
+function drawerCC(d) {
+  const r = ccOf(d.id);
+  if (!r) return '';
+  const movs = r.movs.slice().sort(movSort);
+  return `<section class="card"><div class="card-h"><h2>Cuenta corriente${d.c.codigo != null ? `<span class="count">Cód. ${esc(d.c.codigo)}</span>` : ''}</h2><span class="chips"><button class="btn sm primary" data-act="mov-new" data-tipo="Entrega" data-cid="${esc(d.id)}">+ Pago</button><button class="btn sm" data-act="mov-new" data-tipo="Deuda" data-cid="${esc(d.id)}">+ Venta a cuenta</button></span></div>
+    <div class="card-b" style="display:grid;gap:8px"><div class="facts"><div><span>Saldo</span><b>${saldoTxt(r.saldo, r.diasPago)}</b></div><div><span>Último pago</span><b>${r.ultPago ? fd(r.ultPago) : '—'}</b></div><div><span>Movimientos</span><b>${r.n}</b></div></div>
+    ${movs.length ? `<ul class="hist">${movs.slice(0, 8).map(m => `<li><span class="mono">${fd(m.f)}</span><span>${pill(m.tipo, MOV_CLS[m.tipo] || '')} ${esc([m.comp, m.medio, m.obs].filter(Boolean).join(' · '))}</span><b class="mono">${money2(m.monto)}</b><span></span></li>`).join('')}</ul>` : '<div class="sub">Sin movimientos cargados.</div>'}
+    ${movs.length > 8 ? `<div><button class="btn sm ghost" data-act="mov-ver" data-cid="${esc(d.id)}">Ver los ${movs.length} movimientos</button></div>` : ''}</div></section>`;
+}
+
+// ---------- lector gratis de comprobantes de Contabilium ----------
+// Los PDF que genera Contabilium traen el texto adentro y siempre el mismo diseño: se leen sin IA y sin costo.
+const MARCAS = [['INKIN REVO', 'Inkin Revo'], ['BUTTER', 'Butter'], ['INKPLAY', 'Inkplay'], ['VICE', 'VICE'], ['POPU', 'POPU'], ['AKARI', 'AKARI'], ['SPARK', 'Spark'], ['FILTER', 'Filter'], ['EMALLA', 'Emalla'], ['OCTOPUS', 'Octopus'], ['KWADRON', 'Kwadron'], ['BEETATTOO', 'Beetattoo'], ['DRAGONFLY', 'Dragonfly'], ['BLESSED', 'Blessed'], ['MAST', 'Mast'], ['WJX', 'WJX'], ['EZ', 'EZ'], ['DYNAMIC', 'Dynamic'], ['ETERNAL', 'Eternal'], ['CHEYENNE', 'Cheyenne'], ['RADIANT', 'Radiant'], ['WORLD FAMOUS', 'World Famous'], ['INTENZE', 'Intenze'], ['SOLONG', 'Solong'], ['BISHOP', 'Bishop'], ['FK IRONS', 'FK Irons']];
+const marcaDe = d => { const u = ' ' + String(d).toUpperCase().replace(/[^A-Z0-9]+/g, ' ') + ' '; const m = MARCAS.find(([k]) => u.includes(' ' + k + ' ')); return m ? m[1] : ''; };
+async function pdfLines(pdf) {
+  const out = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const tc = await (await pdf.getPage(i)).getTextContent();
+    const rows = [];
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const x = it.transform[4], y = it.transform[5];
+      let r = rows.find(r => Math.abs(r.y - y) < 3);
+      if (!r) rows.push(r = { y, its: [] });
+      r.its.push({ x, s: it.str.trim() });
+    }
+    rows.sort((a, b) => b.y - a.y);
+    for (const r of rows) out.push(r.its.sort((a, b) => a.x - b.x).map(t => t.s).join(' ').replace(/\s+/g, ' ').trim());
+  }
+  return out;
+}
+const arNum = s => Number(String(s).replace(/\./g, '').replace(',', '.'));
+const CBTE_LETRA = { '01': 'A', '02': 'A', '03': 'A', '06': 'B', '07': 'B', '08': 'B', '11': 'C', '12': 'C', '13': 'C' };
+const MONTO_RE = '\\d{1,3}(?:\\.\\d{3})*,\\d{2}';
+const ITEM_RE = new RegExp(`^(\\d+(?:,\\d+)?) ([A-Z0-9]{2,6}-[A-Z0-9-]+) (.+?) (${MONTO_RE}) (?:(\\d+,\\d{2}) ?% )?(\\d+,\\d{2}) ?% (${MONTO_RE})$`);
+function parseContabilium(lines) {
+  const all = lines.join('\n');
+  if (!/Importe Total:/i.test(all) || !/Raz[óo]n social:/i.test(all)) return null;
+  const g = re => { const m = all.match(re); return m ? m[1].trim() : null; };
+  const clase = (g(/\b(FACTURA|NOTA DE CR[ÉE]DITO|NOTA DE D[ÉE]BITO|PRESUPUESTO|COTIZACI[ÓO]N)\b/i) || 'FACTURA').toUpperCase();
+  const letra = CBTE_LETRA[g(/Cod\.\s*(\d{2})/)] || '';
+  const nro = g(/N[º°o]\s*:?\s*(\d{4,5}-\d{8})/);
+  // una cotización sale con el diseño de factura pero sin CAE y con número 0000-00000000
+  const esCot = /PRESUP|COTIZ/.test(clase) || !/CAE:/i.test(all) || /-0+$/.test(nro || '');
+  const pref = esCot ? 'COT' : /CR[ÉE]DITO/.test(clase) ? 'NC' : /D[ÉE]BITO/.test(clase) ? 'ND' : 'FC';
+  const f = g(/Fecha:\s*(\d{2}\/\d{2}\/\d{4})/);
+  const items = [];
+  let last = null;
+  for (const l of lines) {
+    const m = l.match(ITEM_RE);
+    if (m) {
+      last = { cantidad: arNum(m[1]), codigo: m[2], descripcion: m[3].trim(), precio_unitario: arNum(m[4]), bonif: arNum(m[6]), subtotal: arNum(m[7]) };
+      items.push(last); continue;
+    }
+    // segunda línea de una descripción larga, por ejemplo "(RM)" o "1245RM"
+    if (last && l.length < 60 && !/[:$%]/.test(l) && !new RegExp(MONTO_RE).test(l) && !/^(Cantidad|Son Pesos|Reg\.|Tomas|Original|Cod\.)/i.test(l)) { last.descripcion += ' ' + l; continue; }
+    last = null;
+  }
+  for (const x of items) x.marca = marcaDe(x.descripcion);
+  const total = g(new RegExp(`Importe Total:\\s*\\$\\s*(${MONTO_RE})`));
+  return {
+    fuente: 'contabilium',
+    tipo: /CR[ÉE]DITO/.test(clase) ? 'nota de crédito' : /D[ÉE]BITO/.test(clase) ? 'nota de débito' : pref === 'COT' ? 'cotizacion' : 'factura',
+    numero: nro && !/-0+$/.test(nro) ? `${pref}${esCot ? '' : letra}-${nro}` : null,
+    fecha: f ? f.split('/').reverse().join('-') : null,
+    cliente: g(/Raz[óo]n social:\s*(.+)/),
+    condicion: g(/Condici[óo]n de venta:\s*(.+?)(?:\s+Condici[óo]n de IVA.*)?$/m),
+    total: total ? arNum(total) : null,
+    items,
+  };
+}
+
+// ---------- compras desde factura o cotización ----------
+// Se sube el PDF o la foto, Claude lo lee y devuelve fecha, número, total y artículos; se revisa antes de guardar.
+let SAMPLE = null, ASSETS = null;
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+async function loadPdfJs() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  await new Promise((res, rej) => { const s = document.createElement('script'); s.src = PDFJS + 'pdf.min.js'; s.onload = res; s.onerror = () => rej(new Error('pdfjs')); document.head.appendChild(s); });
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+async function pdfToInput(file) {
+  const lib = await loadPdfJs();
+  const pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  let text = '';
+  const n = Math.min(pdf.numPages, 6);
+  for (let i = 1; i <= n; i++) {
+    const tc = await (await pdf.getPage(i)).getTextContent();
+    text += tc.items.map(it => it.str + (it.hasEOL ? '\n' : ' ')).join('') + '\n\n';
+  }
+  if (text.replace(/\s/g, '').length >= 80) return { text: text.slice(0, 60000), images: [] };
+  // PDF escaneado: se mandan las primeras páginas como imagen
+  const images = [];
+  for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) {
+    const page = await pdf.getPage(i), vp = page.getViewport({ scale: 2 });
+    const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+    await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+    images.push(await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.85)));
+  }
+  return { text: '', images };
+}
+async function imageToBlob(file) {
+  // se normaliza a JPEG de hasta 2200 px para que pese poco y Claude la acepte
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 2200 / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  return new Promise(r => cv.toBlob(r, 'image/jpeg', 0.88));
+}
+const DOC_PROMPT = `Leé este comprobante de Tomás Oberti Supplies (insumos de tatuaje, piercing y PMU) emitido a un cliente: puede ser una factura, una nota de venta o una cotización.
+Respondé SOLO con un objeto JSON con esta forma:
+{"tipo":"factura|nota de venta|cotizacion|otro","numero":"FCA-11-614","fecha":"2026-11-24","cliente":"Nombre del cliente","total":1234567.5,"items":[{"codigo":"","descripcion":"Tinta Inkplay negra 8 oz","marca":"Inkplay","cantidad":2,"precio_unitario":45000,"subtotal":90000}]}
+Reglas:
+- Fechas en formato argentino (dd/mm/aaaa) pasalas a AAAA-MM-DD.
+- Números sin separador de miles y con punto decimal (1.234.567,50 → 1234567.5).
+- "total" es el importe final a pagar, con descuentos e impuestos incluidos.
+- "marca": la marca del producto si se reconoce (Inkplay, Butter, VICE, POPU, AKARI, Spark, Inkin Revo, Filter, Cheyenne, Dynamic, etc.); si no, "".
+- Un renglón por artículo, sin repetir subtotales, descuentos ni totales como artículos.
+- Si un dato no figura, poné null.`;
+const SAMPLE_ERR = { formato: 'No reconocí el formato del PDF y la lectura con Claude no está disponible en esta vista.', not_granted: 'No se dio permiso para usar Claude en esta página.', rate_limited: 'Claude está ocupado. Esperá un minuto y probá de nuevo.', invalid_json: 'No pude leer bien el comprobante. Probá con un PDF o una foto más nítida.', images_unavailable: 'Esta vista no puede mandar imágenes a Claude.', image_rejected: 'La imagen no se pudo leer. Probá con otra foto (JPG o PNG).', prompt_too_large: 'El comprobante es demasiado largo para leerlo de una vez.' };
+let docCtl = null;
+async function processDoc(file, cid) {
+  const c = S.clientes.get(cid); if (!c) return;
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (!isPdf && !SAMPLE) { toast('Las fotos se leen con Claude, que no está disponible en esta vista. Subí el PDF de Contabilium.', true); return; }
+  docCtl = new AbortController();
+  openModal(`<h2>Leyendo el comprobante…</h2><p class="sub" id="doc-st">Preparando ${esc(file.name)}</p><div class="form-actions"><button type="button" class="btn" data-act="doc-cancel">Cancelar</button></div>`);
+  const st = t => { const el = $('#doc-st'); if (el) el.textContent = t; };
+  try {
+    let parsed = null;
+    if (isPdf) {
+      const lib = await loadPdfJs();
+      const pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+      parsed = parseContabilium(await pdfLines(pdf));
+      if (parsed && !parsed.items.length) parsed = null;
+    }
+    if (docCtl.signal.aborted) return;
+    st('Guardando el archivo…');
+    let asset = null;
+    if (ASSETS) { try { asset = await ASSETS.upload(file); } catch { asset = null; } }
+    if (docCtl.signal.aborted) return;
+    if (parsed) { S.docDraft = { cid, file: file.name, asset: asset ? { id: asset.id, type: asset.contentType } : null, r: parsed }; modalDocReview(); return; }
+    if (!SAMPLE) throw { code: 'formato' };
+    let input = { text: '', images: [] };
+    if (isPdf) input = await pdfToInput(file);
+    else input.images = [await imageToBlob(file)];
+    if (docCtl.signal.aborted) return;
+    st('Claude está leyendo los artículos. Puede tardar hasta un minuto…');
+    const prompt = DOC_PROMPT + (input.text ? `\n\nTexto del comprobante:\n"""\n${input.text}\n"""` : '\n\nEl comprobante está en la imagen adjunta.');
+    const r = await SAMPLE.json(prompt, { signal: docCtl.signal, images: input.images.length ? input.images : undefined, modelTier: 'default' });
+    if (!r || typeof r !== 'object') throw { code: 'invalid_json' };
+    S.docDraft = { cid, file: file.name, asset: asset ? { id: asset.id, type: asset.contentType } : null, r };
+    modalDocReview();
+  } catch (e) {
+    if (e && e.code === 'cancelled') return;
+    closeModal();
+    toast((e && SAMPLE_ERR[e.code]) || (e && e.message === 'pdfjs' ? 'No se pudo abrir el PDF.' : 'No se pudo leer el comprobante.'), true);
+  }
+}
+const num = v => { const n = typeof v === 'number' ? v : Number(String(v ?? '').replace(/[^\d.,-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.')); return isFinite(n) ? n : null; };
+function modalDocReview() {
+  const { cid, r, file } = S.docDraft, c = S.clientes.get(cid);
+  const items = Array.isArray(r.items) ? r.items.filter(x => x && x.descripcion) : [];
+  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(r.fecha || '') ? r.fecha : HOY;
+  const total = num(r.total) ?? items.reduce((s, x) => s + (num(x.subtotal) || 0), 0);
+  const tipoDoc = String(r.tipo || 'comprobante');
+  const otroNombre = r.cliente && !norm(c.nombre).split(/\s+/).some(w => w.length > 3 && norm(r.cliente).includes(w));
+  const dup = r.numero && (c.compras || []).some(p => p.comp && norm(p.comp) === norm(r.numero));
+  // misma venta cargada dos veces (por ejemplo la cotización y después la factura)
+  const dupMonto = !dup && total != null && (c.compras || []).find(p => Math.abs((p.m || 0) - total) <= 1 && Math.abs(diff(pd(p.f), pd(fecha))) <= 30);
+  openModal(`<h2>Revisá la compra</h2>
+    <p class="sub" style="margin:0">Leído de ${esc(file)}${r.numero ? ` · ${esc(tipoDoc)} ${esc(r.numero)}` : ''}. Corregí lo que haga falta antes de guardar.</p>
+    <div class="chips">${r.fuente === 'contabilium' ? pill('Leído del PDF de Contabilium · sin costo', 'ok') : pill('Leído con Claude', 'info')}${r.condicion ? pill('Venta: ' + r.condicion) : ''}</div>
+    ${/crédito/i.test(r.tipo || '') ? `<div class="alertbox warn"><b>Es una nota de crédito</b><span>Revisá si corresponde cargarla como compra.</span></div>` : ''}
+    ${items.length && total != null && Math.abs(items.reduce((s, x) => s + (num(x.subtotal) || 0), 0) - total) > 1 ? `<div class="alertbox warn"><b>Los artículos suman ${money2(items.reduce((s, x) => s + (num(x.subtotal) || 0), 0))} y el total es ${money2(total)}</b><span>Puede faltar algún renglón o haber un descuento general. Revisá antes de guardar.</span></div>` : ''}
+    ${otroNombre ? `<div class="alertbox warn"><b>El comprobante dice "${esc(r.cliente)}"</b><span>Fijate que sea de ${esc(c.nombre)}.</span></div>` : ''}
+    ${dup ? `<div class="alertbox warn"><b>Ya hay una compra con el comprobante ${esc(r.numero)}</b><span>Guardala solo si no está repetida.</span></div>` : ''}
+    ${dupMonto ? `<div class="alertbox warn"><b>Ya hay una compra por ${money2(total)} del ${fd(dupMonto.f)}</b><span>Si es la misma venta (la cotización y después la factura), guardá solo una.</span></div>` : ''}
+    <form class="grid" data-form="compra-doc">
+    <label class="f">Fecha<input type="date" name="f" value="${esc(fecha)}" required></label>
+    <label class="f">Monto total ($)<input type="number" name="m" step="0.01" min="0" value="${total ?? ''}" required></label>
+    <label class="f">Tipo<select name="t">${TIPOS}</select></label>
+    <label class="f">Comprobante<input name="comp" value="${esc(r.numero || '')}"></label>
+    <label class="f full">Detalle<input name="n" value="${esc((tipoDoc === 'cotizacion' ? 'Cotización' : tipoDoc.charAt(0).toUpperCase() + tipoDoc.slice(1)) + (r.numero ? ' ' + r.numero : r.fecha ? ' del ' + fd(r.fecha) : ''))}"></label>
+    <div class="full tbl-wrap"><table class="items"><thead><tr><th></th><th>Artículo</th><th>Marca</th><th style="text-align:right">Cant.</th><th style="text-align:right">Subtotal</th></tr></thead><tbody>
+    ${items.map((x, i) => `<tr><td><input type="checkbox" name="it${i}" checked aria-label="Incluir"></td><td>${esc(x.descripcion)}${x.codigo ? `<div class="sub">${esc(x.codigo)}</div>` : ''}</td><td>${esc(x.marca || '')}</td><td class="n">${esc(num(x.cantidad) ?? '')}</td><td class="n">${money2(num(x.subtotal))}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No encontré artículos en el comprobante.</td></tr>'}
+    </tbody></table></div>
+    <p class="sub full" style="margin:0">${items.length} artículos · suman ${money2(items.reduce((s, x) => s + (num(x.subtotal) || 0), 0))}</p>
+    <div class="form-actions"><button type="button" class="btn" data-act="close-modal">Cancelar</button><button class="btn primary">Guardar compra</button></div></form>`);
+}
+function compraExtra(p) {
+  const parts = [];
+  if (p.items && p.items.length) parts.push(`<details class="its"><summary>${p.items.length} artículos</summary><ul>${p.items.map(x => `<li>${x.c != null ? esc(x.c) + ' × ' : ''}${esc(x.d)}${x.mk ? ` <span class="muted">· ${esc(x.mk)}</span>` : ''}${x.s != null ? ` <span class="mono muted">${money2(x.s)}</span>` : ''}</li>`).join('')}</ul></details>`);
+  if (p.doc) parts.push(`<a class="sub" href="/_blob/${encodeURIComponent(p.doc)}" target="_blank" rel="noopener">Ver comprobante</a>`);
+  return parts.length ? `<div>${parts.join(' ')}</div>` : '';
+}
+function drawerArticulos(d) {
+  const agg = new Map();
+  for (const p of d.compras) for (const x of p.items || []) {
+    const k = norm(x.d).replace(/\s+/g, ' ').trim(); if (!k) continue;
+    const a = agg.get(k) || { d: x.d, mk: x.mk, veces: 0, cant: 0, monto: 0, ult: '' };
+    a.veces++; a.cant += Number(x.c) || 0; a.monto += Number(x.s) || 0; if (p.f > a.ult) a.ult = p.f; if (!a.mk && x.mk) a.mk = x.mk;
+    agg.set(k, a);
+  }
+  if (!agg.size) return '';
+  const L = [...agg.values()].sort((a, b) => b.monto - a.monto || b.veces - a.veces);
+  const marcas = new Map(); for (const a of L) if (a.mk) marcas.set(a.mk, (marcas.get(a.mk) || 0) + a.monto);
+  const top = S.expanded && S.expanded['art-' + d.id] ? L : L.slice(0, 10);
+  return `<section class="card"><div class="card-h"><h2>Qué compra<span class="count">${L.length} artículos</span></h2><span class="hint">Según los comprobantes cargados</span></div><div class="card-b" style="display:grid;gap:8px">
+    ${marcas.size ? `<div class="chips">${[...marcas.entries()].sort((a, b) => b[1] - a[1]).map(([m, v]) => pill(`${m} · ${money(v)}`, 'info')).join('')}</div>` : ''}
+    <div class="tbl-wrap"><table class="items"><thead><tr><th>Artículo</th><th style="text-align:right">Veces</th><th style="text-align:right">Cant.</th><th style="text-align:right">Total</th><th style="text-align:right">Última</th></tr></thead><tbody>
+    ${top.map(a => `<tr><td>${esc(a.d)}${a.mk ? `<div class="sub">${esc(a.mk)}</div>` : ''}</td><td class="n">${a.veces}</td><td class="n">${a.cant || '—'}</td><td class="n">${money(a.monto)}</td><td class="n">${fd(a.ult)}</td></tr>`).join('')}</tbody></table></div>
+    ${L.length > 10 ? `<div><button class="btn sm ghost" data-act="expand" data-key="art-${esc(d.id)}">${top.length === L.length ? 'Ver menos' : `Ver los ${L.length}`}</button></div>` : ''}</div></section>`;
+}
+
+// ---------- ficha del cliente ----------
+function suggestTpl(d) {
+  if (d.minimo && d.minimo.estado === 'abierto') return 'min';
+  if (d.ings.length) return d.c.campana === 'Dormido' ? 'ding' : 'nov';
+  if (d.c.campana === 'Volver a mayorista') return 'vaho';
+  if (d.diasMay != null && d.diasMay <= S.cfg.riesgo) return 'repo';
+  if (d.diasMay != null && d.diasMay <= S.cfg.dormido) return 'ding';
+  if (d.diasMay != null && d.diasMay <= 365) return 'drec';
+  return 'dcor';
+}
+function fillTpl(id, d, producto) {
+  const t = TPL.find(x => x.id === id); let s = t.txt;
+  if (d.c.apodo) s = s.replaceAll('[Nombre]', d.c.apodo);
+  const marca = String(d.c.marcas || '').split(',')[0].replace(/^Solo /i, '').trim();
+  const prod = producto || (id === 'repo' ? marca : (d.ings[0] && d.ings[0].g.producto) || marca) || '';
+  if (prod) s = s.replaceAll('[PRODUCTO/MARCA]', prod);
+  if (d.minimo) s = s.replace('[FALTA]', money(d.minimo.falta)).replace('[FECHA]', fd(d.minimo.vence));
+  s = s.replace('[MINIMO]', money(S.cfg.minimo));
+  if (d.c.zona && /Córdoba|Rosario|Buenos Aires|Santa Fe/.test(d.c.zona)) s = s.replace('[CIUDAD]', d.c.zona.replace(' (CABA/GBA)', ''));
+  return s;
+}
+function renderDrawer() {
+  const d = D.get(S.open);
+  if (!d) { closeDrawer(); return; }
+  const c = d.c;
+  const tplId = S.tpl && TPL.some(t => t.id === S.tpl) ? S.tpl : suggestTpl(d);
+  const m = d.minimo;
+  const minBox = m ? (m.estado === 'abierto'
+    ? `<div class="alertbox bad"><b>Mínimo en curso: faltan ${money(m.falta)}</b><span>Lleva ${money(m.suma)} en ${m.n} pedido${m.n > 1 ? 's' : ''} desde el ${fd(m.ini)}. Tiene hasta el ${fd(m.vence)} (${m.rest} días).</span></div>`
+    : `<div class="alertbox warn"><b>No completó el mínimo</b><span>Sumó ${money(m.suma)} entre el ${fd(m.ini)} y el ${fd(m.vence)}.</span></div>`) : '';
+  const otros = d.al.filter(a => a.k !== 'min').map(a => pill(a.t, a.cls)).join('');
+  const sel = (name, arr, v) => `<select name="${name}">${opts(arr, v)}</select>`;
+  const inp = (name, v, type = 'text', ph = '') => `<input type="${type}" name="${name}" value="${esc(v ?? '')}" placeholder="${esc(ph)}">`;
+  const compras = d.compras.slice().reverse();
+  $('#drawer-in').innerHTML = `
+  <div class="d-head"><div class="d-top"><div style="display:grid;gap:6px;min-width:0"><h2>${esc(c.nombre)}</h2>
+    <div class="chips">${estadoPill(d)}${pill(c.campana)}${c.etapa ? pill(c.etapa, 'info') : ''}${c.nuevo ? pill('Cliente nuevo', 'ok') : ''}${d.recup ? pill('Recuperado ' + fd(d.recup.f), 'ok') : ''}${c.divideMinimo ? pill('Divide el mínimo en pedidos', 'warn') : ''}</div></div>
+    <button class="btn sm" data-act="close" aria-label="Cerrar ficha">Cerrar</button></div>
+    <div class="chips">${waLink(c)}${c.tel ? `<span class="pill mono">${esc(c.tel)}</span><button class="btn sm ghost" data-act="copy-text" data-text="${esc(c.tel)}">Copiar teléfono</button>` : ''}</div>
+    ${otros ? `<div class="chips">${otros}</div>` : ''}</div>
+  <div class="facts">
+    <div><span>Última compra</span><b>${d.last ? fd(d.last.f) : '—'}</b></div>
+    <div><span>Días sin comprar</span><b>${d.dias ?? '—'}</b></div>
+    <div><span>Compra cada</span><b>${d.cada ? d.cada + ' días' : '—'}${!c.compraCada && d.cadaCalc ? ' <small class="muted">(calc.)</small>' : ''}</b></div>
+    <div><span>Próx. compra</span><b>${d.prox ? fd(d.prox) : '—'}</b></div>
+    <div><span>Ticket promedio</span><b>${money(d.ticket)}</b></div>
+    <div><span>Últimos 12 meses</span><b>${money(d.total12)}</b></div>
+    <div><span>Descuento</span><b>${esc(c.descuento || '—')}${c.aplicaEn ? ` <small class="muted">${esc(c.aplicaEn)}</small>` : ''}</b></div>
+    <div><span>Pago</span><b>${esc(c.pago || '—')}</b></div>
+    <div><span>Cómo compra</span><b>${esc(c.comoCompra || '—')}</b></div>
+  </div>
+  ${minBox}
+  ${c.pendiente ? `<div class="alertbox warn"><b>Pedido pendiente</b><span>${esc(c.pendiente)}</span></div>` : ''}
+  ${c.espera || c.marcas || c.datos ? `<div class="card card-b" style="display:grid;gap:6px;font-size:13px">${c.marcas ? `<div><span class="muted">Usa:</span> ${esc(c.marcas)}</div>` : ''}${c.espera ? `<div><span class="muted">Le interesa / espera:</span> <b>${esc(c.espera)}</b></div>` : ''}${c.datos ? `<div><span class="muted">Para venderle:</span> ${esc(c.datos)}</div>` : ''}${c.facturar ? `<div><span class="muted">Facturar a:</span> ${esc(c.facturar)}</div>` : ''}</div>` : ''}
+
+  ${drawerCC(d)}
+
+  <section class="card"><div class="card-h"><h2>Registrar compra</h2><label class="btn sm primary" title="Subí el PDF de Contabilium (o una foto): se leen la fecha, el total y los artículos">Desde factura o cotización<input type="file" id="doc-in" accept="application/pdf${SAMPLE ? ',image/*' : ''}" hidden></label></div><div class="card-b">
+    <form class="grid" data-form="compra"><label class="f">Fecha<input type="date" name="f" value="${HOY}" required></label>
+    <label class="f">Monto ($)<input type="number" name="m" min="0" step="1" placeholder="1000000" required></label>
+    <label class="f">Tipo<select name="t">${TIPOS}</select></label>
+    <label class="f full">Detalle (opcional)<input name="n" placeholder="Qué llevó, complemento, cotización…"></label>
+    ${c.pendiente ? `<label class="chk full"><input type="checkbox" name="cierra" checked> Cierra el pedido pendiente</label>` : ''}
+    <div class="form-actions"><button class="btn primary">Guardar compra</button></div></form></div></section>
+
+  <section class="card"><div class="card-h"><h2>Registrar contacto</h2><span class="hint">Queda en el historial y cuenta como recontacto</span></div><div class="card-b">
+    <form class="grid" data-form="contacto"><label class="f">Fecha<input type="date" name="f" value="${HOY}" required></label>
+    <label class="f">Nueva etapa<select name="etapa"><option value="">Sin cambio (${esc(c.etapa || '—')})</option>${ETAPA.slice(1).map(e => `<option>${e}</option>`).join('')}</select></label>
+    <label class="f full">Qué pasó<input name="n" placeholder="Ej.: le pasé precios de Inkplay, responde el lunes" required></label>
+    <label class="f">Próxima acción<input name="proxAccion" value="${esc(c.proxAccion || '')}" placeholder="Ej.: volver a escribir"></label>
+    <label class="f">Fecha próx. acción<input type="date" name="fechaProx" value="${esc(c.fechaProx || '')}"></label>
+    <div class="form-actions"><button class="btn primary">Guardar contacto</button></div></form></div></section>
+
+  <section class="card"><div class="card-h"><h2>Mensaje sugerido</h2><select id="tpl-sel" aria-label="Mensaje">${TPL.map(t => `<option value="${t.id}"${t.id === tplId ? ' selected' : ''}>${esc(t.camp + ' · ' + t.ver)}</option>`).join('')}</select></div>
+    <div class="card-b" style="display:grid;gap:8px"><div class="msg" id="tpl-txt">${esc(fillTpl(tplId, d))}</div><div class="chips"><button class="btn sm primary" data-act="copy-msg">Copiar mensaje</button>${waLink(c)}${!c.apodo ? '<span class="sub">Cargá "Cómo llamarlo" en el perfil para completar el nombre solo.</span>' : ''}</div></div></section>
+
+  ${drawerArticulos(d)}
+
+  <section class="card"><div class="card-h"><h2>Compras<span class="count">${compras.length}</span></h2><span class="hint">Web y minorista no suman al mínimo</span></div><div class="card-b">
+    ${compras.length ? `<ul class="hist">${compras.map(p => { const i = (c.compras || []).indexOf((c.compras || []).find(x => x.f === p.f && x.m === p.m && x.t === p.t && (x.n || '') === (p.n || ''))); return `<li><span class="mono">${fd(p.f)}</span><span>${TIPO_LBL[p.t] ? pill(TIPO_LBL[p.t]) + ' ' : ''}${esc(p.n || '')}${compraExtra(p)}</span><b class="mono">${money(p.m)}</b><button class="x" data-act="del-compra" data-i="${i}" aria-label="Borrar compra">✕</button></li>`; }).join('')}</ul>` : '<div class="sub">Sin compras cargadas.</div>'}</div></section>
+
+  <section class="card"><div class="card-h"><h2>Contactos<span class="count">${d.contactos.length}</span></h2>${c.primerContacto ? `<span class="hint">Primer contacto ${fd(c.primerContacto)}</span>` : ''}</div><div class="card-b">
+    ${d.contactos.length ? `<ul class="hist">${d.contactos.slice().reverse().map(x => `<li style="grid-template-columns:74px minmax(0,1fr)"><span class="mono">${fd(x.f)}</span><span>${esc(x.n)}</span></li>`).join('')}</ul>` : '<div class="sub">Todavía no se lo contactó desde la cartera.</div>'}
+    ${c.notas ? `<div style="margin-top:8px" class="sub"><b>Notas:</b> ${esc(c.notas)}</div>` : ''}</div></section>
+
+  <details class="card" ${S.perfilOpen ? 'open' : ''} id="perfil-det"><summary class="card-h"><h2>Perfil y condiciones</h2><span class="hint">Preferencias, descuento y forma de pago</span></summary><div class="card-b">
+    <form class="grid" data-form="perfil">
+      <label class="f full">Nombre / razón social${inp('nombre', c.nombre)}</label>
+      <label class="f">Cómo llamarlo${inp('apodo', c.apodo, 'text', 'Ej.: Cris')}</label>
+      <label class="f">Teléfono${inp('tel', c.tel, 'tel', '+549…')}</label>
+      <label class="f">Zona${sel('zona', [...new Set([...ZONAS, c.zona || ''])], c.zona)}</label>
+      <label class="f">Campaña${sel('campana', CAMP, c.campana)}</label>
+      <label class="f">Etapa${sel('etapa', ETAPA, c.etapa)}</label>
+      <label class="f">Cómo compra${sel('comoCompra', COMO, c.comoCompra)}</label>
+      <label class="f">Compra cada (días)${inp('compraCada', c.compraCada, 'number', d.cadaCalc ? 'Calculado: ' + d.cadaCalc : '')}</label>
+      <label class="f">Forma de pago${sel('pago', PAGO, c.pago)}</label>
+      <label class="f">Código de cliente (cuenta corriente)${inp('codigo', c.codigo, 'number', 'Ej.: 12')}</label>
+      <label class="chk"><input type="checkbox" name="cc" ${c.cc ? 'checked' : ''}> Trabaja con cuenta corriente</label>
+      <label class="f">Descuento${inp('descuento', c.descuento, 'text', 'Ej.: 10%')}</label>
+      <label class="f">Descuento aplica en${inp('aplicaEn', c.aplicaEn, 'text', 'General, POPU, VICE…')}</label>
+      <label class="f">Facturar a nombre de${inp('facturar', c.facturar)}</label>
+      <label class="f">Primer contacto${inp('primerContacto', c.primerContacto, 'date')}</label>
+      <label class="f full">Marcas / productos que usa${inp('marcas', c.marcas, 'text', 'Separadas por coma')}</label>
+      <label class="f full">Le interesa / espera (cruza con los ingresos)${inp('espera', c.espera, 'text', 'Ej.: Butter, cubregrip')}</label>
+      <label class="f full">Datos útiles para venderle<textarea name="datos">${esc(c.datos || '')}</textarea></label>
+      <label class="f full">Pedido pendiente${inp('pendiente', c.pendiente, 'text', 'Vacío si no tiene')}</label>
+      <label class="f full">Notas de seguimiento<textarea name="notas">${esc(c.notas || '')}</textarea></label>
+      <label class="chk"><input type="checkbox" name="divideMinimo" ${c.divideMinimo ? 'checked' : ''}> Divide el mínimo en 2 o 3 pedidos</label>
+      <label class="chk"><input type="checkbox" name="nuevo" ${c.nuevo ? 'checked' : ''}> Cliente nuevo</label>
+      <div class="form-actions"><button type="button" class="btn danger" data-act="del-cliente">Borrar cliente</button><button class="btn primary">Guardar cambios</button></div>
+    </form></div></details>`;
+}
+function openDrawer(id) {
+  S.open = id; S.dirty = false; S.tpl = null; S.perfilOpen = false;
+  renderDrawer();
+  $('#drawer').hidden = false; $('#scrim').hidden = false;
+  $('#drawer').scrollTop = 0;
+}
+function closeDrawer() { S.open = null; $('#drawer').hidden = true; $('#scrim').hidden = true; }
+
+// ---------- modales ----------
+function openModal(html) { $('#modal-in').innerHTML = html; $('#modal').hidden = false; const f = $('#modal-in input, #modal-in select'); if (f) f.focus(); }
+function closeModal() { $('#modal').hidden = true; $('#modal-in').innerHTML = ''; }
+function modalCliente() {
+  openModal(`<h2>Nuevo cliente</h2><form class="grid" data-form="nuevo-cliente">
+    <label class="f full">Nombre / razón social<input name="nombre" required></label>
+    <label class="f">Teléfono<input name="tel" type="tel" placeholder="+549…"></label>
+    <label class="f">Zona<select name="zona">${opts(ZONAS, '')}</select></label>
+    <label class="f">Campaña<select name="campana">${opts(CAMP, 'Activo')}</select></label>
+    <label class="f">Cómo compra<select name="comoCompra">${opts(COMO, '')}</select></label>
+    <label class="f">Forma de pago<select name="pago">${opts(PAGO, '')}</select></label>
+    <label class="f">Descuento<input name="descuento" placeholder="Ej.: 10%"></label>
+    <label class="f full">Marcas que usa<input name="marcas" placeholder="Separadas por coma"></label>
+    <label class="f">Primera compra: fecha<input type="date" name="f" value="${HOY}"></label>
+    <label class="f">Monto ($)<input type="number" name="m" min="0" placeholder="Vacío si todavía no compró"></label>
+    <label class="chk full"><input type="checkbox" name="nuevo" checked> Es un cliente nuevo (cuenta para la meta)</label>
+    <div class="form-actions"><button type="button" class="btn" data-act="close-modal">Cancelar</button><button class="btn primary">Crear cliente</button></div></form>`);
+}
+function modalCompra() {
+  const names = [...S.clientes.values()].map(c => c.nombre).sort();
+  openModal(`<h2>Registrar compra</h2><form class="grid" data-form="compra-rapida">
+    <label class="f full">Cliente<input name="cliente" list="dl-clientes" required autocomplete="off" placeholder="Escribí el nombre"></label><datalist id="dl-clientes">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+    <label class="f">Fecha<input type="date" name="f" value="${HOY}" required></label>
+    <label class="f">Monto ($)<input type="number" name="m" min="0" required></label>
+    <label class="f">Tipo<select name="t">${TIPOS}</select></label>
+    <label class="f full">Detalle (opcional)<input name="n"></label>
+    <div class="form-actions"><button type="button" class="btn" data-act="close-modal">Cancelar</button><button class="btn primary">Guardar compra</button></div></form>`);
+}
+
+// ---------- escritura ----------
+function toast(t, err) { const el = $('#toast'); el.textContent = t; el.className = err ? 'err' : ''; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, err ? 5000 : 2200); }
+function errMsg(e) {
+  const k = e && e.code;
+  if (k === 'invalid_argument') return 'No se pudo guardar: tu acceso a esta página es de solo lectura.';
+  if (k === 'quota_exceeded') return 'La base está llena. Borrá ingresos viejos para liberar espacio.';
+  return 'No se pudo guardar. Revisá la conexión y probá de nuevo.';
+}
+async function write(fn, ok = 'Guardado') {
+  if (!db) { toast('La base de datos no está disponible en esta vista.', true); return false; }
+  const done = () => { toast(ok); S.dirty = false; refresh(); return true; };
+  try { await fn(); return done(); }
+  catch (e) { if (e && e.code === 'unavailable') { try { await new Promise(r => setTimeout(r, 600 + Math.random() * 600)); await fn(); return done(); } catch (e2) { toast(errMsg(e2), true); return false; } } toast(errMsg(e), true); return false; }
+}
+const cref = id => db.collection('clientes').doc(id);
+function addCompraData(c, p, cierra) {
+  const data = { compras: [...(c.compras || []), p] };
+  if (p.t === 'mayorista' && ['Sin contactar', 'Contactado', 'Interesado', ''].includes(c.etapa || '') && c.campana !== 'Activo') data.etapa = 'Compró';
+  if (cierra) data.pendiente = '';
+  return data;
+}
+function formObj(form) { const o = {}; for (const el of form.elements) { if (!el.name) continue; o[el.name] = el.type === 'checkbox' ? el.checked : el.value.trim(); } return o; }
+
+document.addEventListener('submit', async e => {
+  const form = e.target.closest('form[data-form]'); if (!form) return;
+  e.preventDefault();
+  const kind = form.dataset.form, o = formObj(form);
+  const btn = form.querySelector('button:not([type="button"])'); if (btn) btn.disabled = true;
+  try {
+    if (kind === 'compra' && S.open) {
+      const c = S.clientes.get(S.open);
+      const p = { f: o.f, m: Number(o.m), t: o.t, n: o.n };
+      if (await write(() => cref(S.open).update(addCompraData(c, p, o.cierra)), 'Compra guardada')) S.dirty = false;
+    } else if (kind === 'contacto' && S.open) {
+      const c = S.clientes.get(S.open);
+      const data = { contactos: [...(c.contactos || []), { f: o.f, n: o.n }], proxAccion: o.proxAccion, fechaProx: o.fechaProx || null };
+      if (!c.primerContacto || o.f < c.primerContacto) data.primerContacto = o.f;
+      if (o.etapa) data.etapa = o.etapa;
+      if (await write(() => cref(S.open).update(data), 'Contacto guardado')) S.dirty = false;
+    } else if (kind === 'perfil' && S.open) {
+      if (!o.nombre) { toast('El nombre no puede quedar vacío.', true); return; }
+      const codigo = o.codigo === '' ? null : Number(o.codigo);
+      if (codigo != null) { const otro = [...S.clientes.entries()].find(([id, x]) => id !== S.open && x.codigo === codigo); if (otro) { toast(`El código ${codigo} ya lo tiene ${otro[1].nombre}.`, true); return; } }
+      const data = { ...o, codigo, compraCada: o.compraCada ? Number(o.compraCada) : null, primerContacto: o.primerContacto || null };
+      S.perfilOpen = true;
+      if (await write(() => cref(S.open).update(data), 'Cambios guardados')) S.dirty = false;
+    } else if (kind === 'nuevo-cliente') {
+      if (!o.nombre) return;
+      const id = 'c-' + slug(o.nombre) + '-' + Math.random().toString(36).slice(2, 6);
+      const doc = { nombre: o.nombre.toUpperCase(), tel: o.tel, zona: o.zona, campana: o.campana, etapa: o.m ? 'Compró' : '', comoCompra: o.comoCompra, pago: o.pago, descuento: o.descuento, aplicaEn: o.descuento ? 'General' : '',
+        marcas: o.marcas, espera: '', datos: '', facturar: '', notas: '', pendiente: '', proxAccion: '', fechaProx: null, primerContacto: null, contactos: [], compraCada: null, divideMinimo: false, nuevo: o.nuevo, creado: HOY,
+        compras: o.m ? [{ f: o.f, m: Number(o.m), t: 'mayorista', n: '' }] : [] };
+      if (await write(() => cref(id).set(doc), 'Cliente creado')) { closeModal(); S.clientes.set(id, doc); recompute(); openDrawer(id); }
+    } else if (kind === 'compra-rapida') {
+      const entry = [...S.clientes.entries()].find(([, c]) => norm(c.nombre) === norm(o.cliente));
+      if (!entry) { toast('No encontré ese cliente. Elegilo de la lista o crealo con + Cliente.', true); return; }
+      const [id, c] = entry;
+      if (await write(() => cref(id).update(addCompraData(c, { f: o.f, m: Number(o.m), t: o.t, n: o.n })), 'Compra guardada')) { closeModal(); openDrawer(id); }
+    } else if (kind === 'compra-doc' && S.docDraft) {
+      const { cid, r, asset, file } = S.docDraft, c = S.clientes.get(cid);
+      const items = (Array.isArray(r.items) ? r.items.filter(x => x && x.descripcion) : [])
+        .map((x, i) => o['it' + i] === false ? null : { d: String(x.descripcion), cod: x.codigo || '', mk: x.marca || '', c: num(x.cantidad), pu: num(x.precio_unitario), s: num(x.subtotal) })
+        .filter(Boolean);
+      const p = { f: o.f, m: Number(o.m), t: o.t, n: o.n, comp: o.comp, items, doc: asset ? asset.id : null, docNombre: file };
+      if (await write(() => cref(cid).update(addCompraData(c, p)), 'Compra guardada')) { S.docDraft = null; closeModal(); S.dirty = false; }
+    } else if (kind === 'mov') {
+      const ent = findCliente(o.cliente);
+      if (!ent) { toast('No encontré ese cliente. Elegilo de la lista.', true); return; }
+      const [cid, c] = ent;
+      let monto = Number(o.monto);
+      if (!isFinite(monto) || monto === 0) { toast('Cargá un monto distinto de cero.', true); return; }
+      monto = o.tipo === 'Deuda' ? Math.abs(monto) : o.tipo === 'Entrega' ? -Math.abs(monto) : monto;
+      const id = 'm-' + o.f + '-' + Math.random().toString(36).slice(2, 8);
+      const doc = { f: o.f, cid, tipo: o.tipo, monto, comp: o.comp, medio: o.medio, obs: o.obs, creado: new Date().toISOString() };
+      if (await write(() => db.collection('movimientos').doc(id).set(doc), o.tipo === 'Entrega' ? 'Pago guardado' : 'Movimiento guardado')) {
+        closeModal();
+        if (!c.cc) await write(() => cref(cid).update({ cc: true }), 'Movimiento guardado');
+      }
+    } else if (kind === 'ingreso') {
+      const id = 'i-' + o.fecha + '-' + slug(o.producto).slice(0, 24) + '-' + Math.random().toString(36).slice(2, 5);
+      if (await write(() => db.collection('ingresos').doc(id).set({ fecha: o.fecha, producto: o.producto, nota: o.nota, avisados: {} }), 'Ingreso cargado')) { form.reset(); form.querySelector('[name="fecha"]').value = HOY; }
+    } else if (kind === 'cfg') {
+      const data = {}; for (const k of Object.keys(DEF)) data[k] = (k === 'desde' || k === 'hasta') ? (o[k] || DEF[k]) : (Number(o[k]) || DEF[k]);
+      await write(() => db.doc('config/general').set(data), 'Reglas guardadas');
+    }
+  } finally { if (btn) btn.disabled = false; }
+});
+
+document.addEventListener('input', e => { if (e.target.closest('#drawer form')) S.dirty = true; });
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.classList && t.classList.contains('obs-in')) {
+    const m = S.movs.find(x => x.id === t.dataset.id), v = t.value.trim();
+    if (m && v !== (m.obs || '')) write(() => db.collection('movimientos').doc(m.id).update({ obs: v }), 'Observación guardada');
+    return;
+  }
+  if (t.id === 'tpl-sel') { S.tpl = t.value; const d = D.get(S.open); $('#tpl-txt').textContent = fillTpl(t.value, d); return; }
+  if (t.closest('#drawer form')) S.dirty = true;
+  if (t.id === 'r-camp') { S.rec.camp = t.value; renderRecuperar(); }
+  if (t.id === 'doc-in') { const f = t.files && t.files[0]; t.value = ''; if (f && S.open) processDoc(f, S.open); return; }
+  if (t.id === 'mv-viejos') { S.mv.viejos = t.checked; renderDyn(); return; }
+  const ccmap = { 'cc-sort': ['cc', 'sort'], 'mv-tipo': ['mv', 'tipo'], 'mv-desde': ['mv', 'desde'], 'mv-hasta': ['mv', 'hasta'] };
+  if (ccmap[t.id]) { const [k, f] = ccmap[t.id]; S[k][f] = t.value; renderDyn(); return; }
+  const fmap = { 'f-camp': 'camp', 'f-estado': 'estado', 'f-pago': 'pago', 'f-zona': 'zona', 'f-sort': 'sort', 'f-alerta': 'alerta' };
+  if (fmap[t.id]) { S.f[fmap[t.id]] = t.value; renderClientes(); }
+});
+let qT;
+let ccT;
+document.addEventListener('input', e => { const k = { 'cc-q': 'cc', 'mv-q': 'mv' }[e.target.id]; if (k) { clearTimeout(ccT); ccT = setTimeout(() => { S[k].q = e.target.value; renderDyn(); }, 150); } });
+document.addEventListener('input', e => { if (e.target.id === 'f-q') { clearTimeout(qT); qT = setTimeout(() => { S.f.q = e.target.value; renderClientes(); }, 150); } });
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast('Copiado'); }
+  catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Copiado'); } catch { toast('Seleccioná el texto y copialo a mano.', true); } ta.remove(); }
+}
+
+document.addEventListener('click', async e => {
+  const tabBtn = e.target.closest('[data-tab]');
+  if (tabBtn) { setTab(tabBtn.dataset.tab); return; }
+  const open = e.target.closest('[data-open]');
+  if (open && !e.target.closest('a, [data-act]')) { openDrawer(open.dataset.open); return; }
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const act = a.dataset.act;
+  if (act === 'close') closeDrawer();
+  else if (act === 'close-modal') closeModal();
+  else if (act === 'nuevo-cliente') modalCliente();
+  else if (act === 'nueva-compra') modalCompra();
+  else if (act === 'doc-cancel') { if (docCtl) docCtl.abort(); closeModal(); }
+  else if (act === 'mov-new') modalMov(a.dataset.cid || (S.open && a.closest('#drawer') ? S.open : null), a.dataset.tipo);
+  else if (act === 'cc-ver') { S.cc.ver = a.dataset.v; renderCCStatic(); renderCC(); }
+  else if (act === 'mov-ver') { const c = S.clientes.get(a.dataset.cid); S.mv = { q: c ? c.nombre : '', tipo: '', desde: '', hasta: '', viejos: S.mv.viejos }; closeDrawer(); setTab('movimientos'); }
+  else if (act === 'del-mov') {
+    if (!a.dataset.confirm) { a.dataset.confirm = '1'; a.textContent = 'Borrar'; a.classList.add('danger'); return; }
+    await write(() => db.collection('movimientos').doc(a.dataset.id).delete(), 'Movimiento borrado');
+  }
+  else if (act === 'nuevo-ingreso') { setTab('ingresos'); setTimeout(() => { const el = $('#i-prod'); if (el) el.focus(); }, 0); }
+  else if (act === 'expand') { S.expanded = S.expanded || {}; S.expanded[a.dataset.key] = !S.expanded[a.dataset.key]; renderDyn(); }
+  else if (act === 'rec-vel') { S.rec.vel = a.dataset.v; renderRecuperarStatic(); renderRecuperar(); }
+  else if (act === 'copy-text') copy(a.dataset.text);
+  else if (act === 'copy-msg') copy($('#tpl-txt').textContent);
+  else if (act === 'copy-tpl') copy(TPL.find(t => t.id === a.dataset.tpl).txt);
+  else if (act === 'copy-ing') { const g = S.ingresos.find(x => x.id === a.dataset.ing), d = D.get(a.dataset.cid); copy(fillTpl(d.c.campana === 'Dormido' ? 'ding' : 'nov', d, g.producto)); }
+  else if (act === 'avisado') {
+    const g = S.ingresos.find(x => x.id === a.dataset.ing), id = a.dataset.cid, c = S.clientes.get(id);
+    a.disabled = true;
+    const ok = await write(() => db.collection('ingresos').doc(g.id).update({ avisados: { [id]: HOY } }), 'Marcado como avisado');
+    if (ok) {
+      const data = { contactos: [...(c.contactos || []), { f: HOY, n: 'Aviso de ingreso: ' + g.producto }] };
+      if (!c.primerContacto) data.primerContacto = HOY;
+      if (!c.etapa || c.etapa === 'Sin contactar') data.etapa = 'Contactado';
+      await write(() => cref(id).update(data), 'Marcado como avisado');
+    } else a.disabled = false;
+  }
+  else if (act === 'del-ing') {
+    if (a.dataset.confirm) { await write(() => db.collection('ingresos').doc(a.dataset.ing).delete(), 'Ingreso borrado'); }
+    else { a.dataset.confirm = '1'; a.textContent = 'Tocá de nuevo para borrar'; a.classList.add('danger'); }
+  }
+  else if (act === 'del-compra') {
+    if (!a.dataset.confirm) { a.dataset.confirm = '1'; a.textContent = 'Borrar'; a.style.color = 'var(--bad)'; return; }
+    const c = S.clientes.get(S.open), i = Number(a.dataset.i);
+    const compras = (c.compras || []).filter((_, j) => j !== i);
+    if (await write(() => cref(S.open).update({ compras }), 'Compra borrada')) S.dirty = false;
+  }
+  else if (act === 'del-cliente') {
+    if (!a.dataset.confirm) { a.dataset.confirm = '1'; a.textContent = 'Confirmar: borrar para siempre'; return; }
+    const id = S.open;
+    if (await write(() => cref(id).delete(), 'Cliente borrado')) closeDrawer();
+  }
+});
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (t.classList && t.classList.contains('obs-in')) {
+    if (e.key === 'Enter') t.blur();
+    else if (e.key === 'Escape') { t.value = t.defaultValue; t.blur(); }
+    e.stopImmediatePropagation();
+  }
+}, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#modal').hidden) closeModal(); else if (S.open) closeDrawer(); } });
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+document.addEventListener('toggle', e => { if (e.target.id === 'perfil-det') S.perfilOpen = e.target.open; }, true);
+
+// ---------- navegación y render ----------
+function setTab(t) {
+  S.tab = t;
+  for (const b of document.querySelectorAll('#tabs [data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === t));
+  if (location.hash.slice(1) !== t) { try { history.replaceState(null, '', '#' + t); } catch {} }
+  renderStatic(); renderDyn(); window.scrollTo(0, 0);
+}
+function renderStatic() {
+  $('#tab-static').innerHTML = '';
+  if (S.tab === 'clientes') renderClientesStatic();
+  else if (S.tab === 'recuperar') renderRecuperarStatic();
+  else if (S.tab === 'ingresos') renderIngresosStatic();
+  else if (S.tab === 'cuentas') renderCCStatic();
+  else if (S.tab === 'movimientos') renderMovStatic();
+}
+function renderDyn() {
+  if (!S.loaded.c) return;
+  if (S.tab === 'hoy') renderHoy();
+  else if (S.tab === 'clientes') renderClientes();
+  else if (S.tab === 'recuperar') renderRecuperar();
+  else if (S.tab === 'ingresos') renderIngresos();
+  else if (S.tab === 'cuentas') renderCC();
+  else if (S.tab === 'movimientos') renderMov();
+  else if (S.tab === 'resultados') renderResultados();
+  else if (S.tab === 'ajustes') renderAjustes();
+  if (S.tab !== 'hoy') { const A = all(); const urg = A.filter(d => d.al.some(a => (a.k === 'seg' && a.cls !== 'info') || a.k === 'min')).length; const cnt = $('#cnt-hoy'); cnt.hidden = !urg; cnt.textContent = urg; }
+}
+// listas desplegables de los buscadores: todos los clientes y los que tienen cuenta corriente
+let dlKey = '';
+function fillDatalists() {
+  const byName = (a, b) => a.localeCompare(b);
+  const todos = [...S.clientes.values()].map(c => c.nombre).filter(Boolean).sort(byName);
+  const cuenta = ccData().map(r => r.c.nombre).filter(Boolean).sort(byName);
+  const key = todos.join('|') + '#' + cuenta.join('|');
+  if (key === dlKey) return;
+  dlKey = key;
+  const o = a => a.map(n => `<option value="${esc(n)}">`).join('');
+  $('#dl-todos').innerHTML = o(todos); $('#dl-cuenta').innerHTML = o(cuenta);
+}
+let raf = 0;
+function refresh() {
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(() => {
+    recompute();
+    fillDatalists();
+    if (document.activeElement && document.activeElement.closest('form[data-form="cfg"], .obs-in')) { /* no pisar lo que se está escribiendo */ } else renderDyn();
+    if (S.open && !S.dirty) { const sc = $('#drawer').scrollTop; renderDrawer(); $('#drawer').scrollTop = sc; }
+  });
+}
+function banner(t) { $('#banner').hidden = !t; $('#banner-t').textContent = t || ''; }
+
+$('#hoy-lbl').textContent = 'Tomás Oberti Supplies · ' + TODAY.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+const initial = location.hash.slice(1);
+if (['hoy', 'clientes', 'cuentas', 'movimientos', 'recuperar', 'ingresos', 'resultados', 'ajustes'].includes(initial)) S.tab = initial;
+for (const b of document.querySelectorAll('#tabs [data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === S.tab));
+renderStatic();
+
+(async () => {
+  db = window.claude && window.claude.use ? await window.claude.use('db') : null;
+  if (!db) { banner('No se pudo conectar con la base de datos. Revisá la conexión y recargá la página.'); $('#tab-dyn').innerHTML = ''; return; }
+  const timer = setTimeout(() => banner('Todavía no se pudo conectar con la base. Si tarda, revisá la conexión.'), 10000);
+  const onErr = e => { clearTimeout(timer); banner(e && e.code === 'revoked' ? 'Ya no tenés acceso a esta base.' : 'Se cortó la conexión con la base. Recargá la página.'); };
+  db.collection('clientes').onSnapshot(snap => {
+    if (!snap.metadata.fromCache) { clearTimeout(timer); banner(''); }
+    S.clientes = new Map(snap.docs.map(d => [d.id, d.data()]));
+    S.loaded.c = true; refresh();
+  }, onErr);
+  window.claude.use('sample').then(f => { SAMPLE = f; if (S.open) refresh(); }).catch(() => {});
+  window.claude.use('assets').then(a => { ASSETS = a; }).catch(() => {});
+  db.collection('movimientos').onSnapshot(snap => { S.movs = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.m = true; refresh(); }, onErr);
+  db.collection('ingresos').onSnapshot(snap => { S.ingresos = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.i = true; refresh(); }, onErr);
+  db.doc('config/general').onSnapshot(snap => { S.cfg = { ...DEF, ...(snap.exists ? snap.data() : {}) }; refresh(); }, onErr);
+})();
+})();
+</script>
+
+</body></html>

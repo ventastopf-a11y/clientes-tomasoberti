@@ -1,0 +1,9 @@
+dist/
+node_modules/
+.env*
+.vercel/
+# Datos de clientes: nunca van al repositorio
+seed*.sql
+export/
+*.xlsx
+*.csv

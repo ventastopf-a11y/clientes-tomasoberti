@@ -1,0 +1,12 @@
+{
+  "name": "cartera-mayorista",
+  "private": true,
+  "description": "Cartera Mayorista de Tomás Oberti Supplies: clientes, cuentas corrientes y movimientos sobre Supabase.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
