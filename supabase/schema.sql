@@ -72,6 +72,13 @@ drop policy if exists equipo on public.config;
 create policy equipo on public.config for all to authenticated using (public.es_permitido()) with check (public.es_permitido());
 -- `permitidos` no tiene políticas: solo se edita desde el panel de Supabase.
 
+-- ---------- permisos de la API: solo usuarios con sesión (y después filtra es_permitido) ----------
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.clientes, public.movimientos, public.ingresos, public.config to authenticated;
+grant select on public.saldos to authenticated;
+revoke all on public.clientes, public.movimientos, public.ingresos, public.config, public.saldos, public.permitidos from anon;
+grant execute on function public.es_permitido() to authenticated;
+
 -- ---------- tiempo real: los cambios de uno se ven al instante en las otras pantallas ----------
 do $$
 declare t text;
