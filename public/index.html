@@ -444,7 +444,7 @@ function renderHoy() {
   const topRow = d => `<li><div class="main">${nm(d)}<span class="sub">${esc(d.why.slice(0, 3).join(' · '))}</span></div><div class="side">${pill(d.vel, d.vel === 'Rápida' ? 'ok' : d.vel === 'Media' ? 'info' : '')}${waLink(d.c)}</div></li>`;
   const ingBody = ingN.length ? `<ul class="rows">${ingN.map(x => `<li><div class="main"><b>${esc(x.g.producto)}</b><span class="sub">Ingresó el ${fd(x.g.fecha)}</span></div><div class="side">${pill(`${x.n} por avisar`, 'ok')}<button class="btn sm" data-tab="ingresos">Avisar</button></div></li>`).join('')}</ul>` : `<div class="empty">Sin ingresos en las últimas 3 semanas. Cargá uno con <b>+ Ingreso</b> y la lista de a quién avisar se arma sola.</div>`;
 
-  $('#tab-dyn').innerHTML = kpis() + `<div class="grid2" style="margin-top:14px">` +
+  $('#tab-dyn').innerHTML = respaldoAviso() + kpis() + `<div class="grid2" style="margin-top:14px">` +
     card('Seguimientos', 'Vencidos, hoy y próximos 3 días', list(seg, segRow, 'No hay seguimientos agendados para estos días.', 10, 'seg'), seg.length) +
     card('Mínimo en curso', `Deben sumar ${money(S.cfg.minimo)} en ${S.cfg.ventana} días`, list(min, minRow, 'Nadie tiene un mínimo abierto.', 10, 'min'), min.length) +
     card('Avisar ingresos', 'A quién le interesa lo que llegó', ingBody, ingN.reduce((s, x) => s + x.n, 0)) +
@@ -587,7 +587,7 @@ function renderAjustes() {
   const c = S.cfg;
   const n = (id, l, v, extra = '') => `<label class="f">${l}<input type="number" name="${id}" value="${esc(v)}" min="0" ${extra}></label>`;
   $('#tab-static').innerHTML = '';
-  $('#tab-dyn').innerHTML = card('Reglas de la cartera', 'Los cambios se aplican para todos', `<div class="card-b"><form class="grid" data-form="cfg">
+  $('#tab-dyn').innerHTML = respaldoCard() + card('Reglas de la cartera', 'Los cambios se aplican para todos', `<div class="card-b"><form class="grid" data-form="cfg">
     ${n('minimo', 'Compra mínima mayorista ($)', c.minimo, 'step="1000"')}${n('ventana', 'Días para completar el mínimo', c.ventana)}
     ${n('activo', 'Activo hasta (días sin comprar)', c.activo)}${n('riesgo', 'En riesgo hasta', c.riesgo)}${n('dormido', 'Dormido hasta (después: Perdido)', c.dormido)}
     ${n('metaRecup', 'Meta: recuperados', c.metaRecup)}${n('metaVolver', 'Meta: volver a mayorista', c.metaVolver)}${n('metaNuevos', 'Meta: clientes nuevos', c.metaNuevos)}
@@ -936,6 +936,65 @@ function drawerArticulos(d) {
     ${L.length > 10 ? `<div><button class="btn sm ghost" data-act="expand" data-key="art-${esc(d.id)}">${top.length === L.length ? 'Ver menos' : `Ver los ${L.length}`}</button></div>` : ''}</div></section>`;
 }
 
+// ---------- respaldo ----------
+// Descarga a la computadora todo lo que hay en la base: un Excel para leer y un JSON completo para poder restaurar.
+const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+const loadXlsx = () => window.XLSX ? Promise.resolve(window.XLSX) : new Promise((res, rej) => {
+  const s = document.createElement('script'); s.src = XLSX_URL; s.onload = () => res(window.XLSX); s.onerror = () => rej(new Error('xlsx')); document.head.appendChild(s);
+});
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento local */ } };
+function descargar(nombre, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nombre;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+async function respaldoExcel() {
+  const XLSX = await loadXlsx();
+  const cc = new Map(ccData().map(r => [r.id, r]));
+  const nom = id => (S.clientes.get(id) || {}).nombre || id;
+  const cli = [], com = [], art = [], con = [];
+  const lista = [...S.clientes.entries()].sort((a, b) => String(a[1].nombre).localeCompare(String(b[1].nombre)));
+  for (const [id, c] of lista) {
+    const d = D.get(id), r = cc.get(id);
+    cli.push({ 'Código': c.codigo ?? '', Cliente: c.nombre, 'Teléfono': c.tel || '', Zona: c.zona || '', 'Campaña': c.campana || '', Etapa: c.etapa || '', Estado: d ? d.estado : '',
+      'Última compra': d && d.last ? d.last.f : '', 'Cuenta corriente': c.cc ? 'Sí' : '', Saldo: r ? r.saldo : '', Descuento: c.descuento || '', 'Aplica en': c.aplicaEn || '',
+      'Forma de pago': c.pago || '', 'Marcas que usa': c.marcas || '', 'Le interesa': c.espera || '', 'Pedido pendiente': c.pendiente || '',
+      'Próxima acción': c.proxAccion || '', 'Fecha próx. acción': c.fechaProx || '', Notas: c.notas || '', ID: id });
+    for (const p of c.compras || []) {
+      com.push({ Cliente: c.nombre, Fecha: p.f, Monto: p.m, Tipo: p.t || 'mayorista', Detalle: p.n || '', Comprobante: p.comp || '', 'Artículos': (p.items || []).length });
+      for (const x of p.items || []) art.push({ Cliente: c.nombre, Fecha: p.f, Comprobante: p.comp || '', Cantidad: x.c, 'Código': x.cod || '', 'Descripción': x.d, Marca: x.mk || '', 'Precio unit.': x.pu, Importe: x.s });
+    }
+    for (const x of c.contactos || []) con.push({ Cliente: c.nombre, Fecha: x.f, Nota: x.n });
+  }
+  const mov = S.movs.slice().sort(movSort).map(m => ({ Fecha: m.f, 'Código': (S.clientes.get(m.cid) || {}).codigo ?? '', Cliente: nom(m.cid), 'Fact. o NV': m.comp || '', Tipo: m.tipo, Monto: Number(m.monto) || 0, Medio: m.medio || '', Observaciones: m.obs || '' }));
+  const ing = S.ingresos.map(g => ({ Fecha: g.fecha, Producto: g.producto, Nota: g.nota || '', Avisados: Object.keys(g.avisados || {}).length }));
+  const wb = XLSX.utils.book_new();
+  for (const [rows, name] of [[cli, 'Clientes'], [mov, 'Movimientos'], [com, 'Compras'], [art, 'Artículos'], [con, 'Contactos'], [ing, 'Ingresos']]) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ '': 'Sin datos' }]), name);
+  }
+  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  descargar(`respaldo-cartera-${HOY}.xlsx`, new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+}
+function respaldoJson() {
+  const data = { exportado: new Date().toISOString(), clientes: Object.fromEntries(S.clientes), movimientos: S.movs, ingresos: S.ingresos, config: S.cfg };
+  descargar(`respaldo-cartera-${HOY}.json`, new Blob([JSON.stringify(data)], { type: 'application/json' }));
+}
+const diasRespaldo = () => { const u = lsGet('ultimoRespaldo'); return u ? diff(pd(u), TODAY) : null; };
+function respaldoCard() {
+  const u = lsGet('ultimoRespaldo'), d = diasRespaldo();
+  return card('Respaldo', u ? `Último desde esta computadora: ${fd(u)}${d ? ` (hace ${d} días)` : ' (hoy)'}` : 'Todavía no descargaste un respaldo desde esta computadora',
+    `<div class="card-b" style="display:grid;gap:10px"><p class="sub" style="margin:0">Baja a tu computadora una copia de todo: clientes, compras con sus artículos, contactos, cuentas corrientes y movimientos. Conviene hacerlo una vez por semana y guardar el archivo en una carpeta o en Google Drive.</p>
+    <div class="chips"><button class="btn primary" data-act="backup-xlsx">Descargar respaldo (Excel)</button><button class="btn" data-act="backup-json">Respaldo completo para restaurar (JSON)</button></div>
+    <p class="sub" style="margin:0">Los comprobantes PDF no entran en el respaldo: quedan guardados en Supabase.</p></div>`);
+}
+function respaldoAviso() {
+  const d = diasRespaldo();
+  if (d != null && d < 7) return '';
+  return `<div class="alertbox warn" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span><b>${d == null ? 'Todavía no hay un respaldo descargado' : `Hace ${d} días que no descargás un respaldo`}</b> · conviene hacerlo una vez por semana.</span><button class="btn sm" data-act="backup-xlsx">Descargar respaldo</button></div>`;
+}
+
 // ---------- ficha del cliente ----------
 function suggestTpl(d) {
   if (d.minimo && d.minimo.estado === 'abierto') return 'min';
@@ -1212,6 +1271,14 @@ document.addEventListener('click', async e => {
   else if (act === 'close-modal') closeModal();
   else if (act === 'nuevo-cliente') modalCliente();
   else if (act === 'nueva-compra') modalCompra();
+  else if (act === 'backup-xlsx' || act === 'backup-json') {
+    a.disabled = true;
+    try {
+      if (act === 'backup-xlsx') await respaldoExcel(); else respaldoJson();
+      lsSet('ultimoRespaldo', HOY); toast('Respaldo descargado'); renderDyn();
+    } catch (e) { toast('No se pudo armar el respaldo. Revisá la conexión y probá de nuevo.', true); }
+    finally { a.disabled = false; }
+  }
   else if (act === 'doc-cancel') { if (docCtl) docCtl.abort(); closeModal(); }
   else if (act === 'mov-new') modalMov(a.dataset.cid || (S.open && a.closest('#drawer') ? S.open : null), a.dataset.tipo);
   else if (act === 'cc-ver') { S.cc.ver = a.dataset.v; renderCCStatic(); renderCC(); }
