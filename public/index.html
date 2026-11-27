@@ -910,6 +910,7 @@ function modalDocReview() {
     ${items.map((x, i) => `<tr><td><input type="checkbox" name="it${i}" checked aria-label="Incluir"></td><td>${esc(x.descripcion)}${x.codigo ? `<div class="sub">${esc(x.codigo)}</div>` : ''}</td><td>${esc(x.marca || '')}</td><td class="n">${esc(num(x.cantidad) ?? '')}</td><td class="n">${money2(num(x.subtotal))}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No encontré artículos en el comprobante.</td></tr>'}
     </tbody></table></div>
     <p class="sub full" style="margin:0">${items.length} artículos · suman ${money2(items.reduce((s, x) => s + (num(x.subtotal) || 0), 0))}</p>
+    ${chkACuenta(!!c.cc, `Registrar también como venta a cuenta (suma al saldo de la cuenta corriente${c.cc ? '' : ' y pasa el cliente a cuenta corriente'})`)}
     <div class="form-actions"><button type="button" class="btn" data-act="close-modal">Cancelar</button><button class="btn primary">Guardar compra</button></div></form>`);
 }
 function compraExtra(p) {
@@ -1018,8 +1019,9 @@ function modalEditCompra(cid, i) {
     <label class="f full">Detalle<input name="n" value="${esc(p.n || '')}"></label>
     <div class="full tbl-wrap"><table class="items"><thead><tr><th>Cant.</th><th>Artículo</th><th>Marca</th><th style="text-align:right">Importe</th><th></th></tr></thead>
       <tbody id="ed-items">${items.map((x, k) => itemRow(x, k)).join('')}</tbody></table></div>
+    ${p.mov && S.movs.some(m => m.id === p.mov) ? `<p class="sub full" style="margin:0">Vinculada a una venta a cuenta: si cambiás fecha, monto o comprobante, el movimiento se actualiza igual.</p>` : chkACuenta(false, 'Registrar también como venta a cuenta (suma al saldo de la cuenta corriente)')}
     <div class="full chips"><button type="button" class="btn sm" data-act="it-add">+ Agregar artículo</button><button type="button" class="btn sm" data-act="it-sum">Usar la suma de los artículos como monto</button><span class="sub" id="ed-suma"></span></div>
-    <div class="form-actions"><button type="button" class="btn" data-act="close-modal">Cancelar</button><button class="btn primary">Guardar cambios</button></div></form>`);
+    <div class="form-actions" style="justify-content:space-between"><button type="button" class="btn danger" data-act="del-compra" data-i="${i}">Borrar compra</button><span style="display:flex;gap:8px"><button type="button" class="btn" data-act="close-modal">Cancelar</button><button class="btn primary">Guardar cambios</button></span></div></form>`);
   edSuma();
 }
 function edItems() {
@@ -1051,6 +1053,31 @@ function ventasCard() {
     `<div class="card-b" style="display:grid;gap:10px"><div class="filters"><label class="sub">Desde <input type="date" id="vac-desde" value="${esc(desde)}"></label>
     <button class="btn primary" data-act="vac-pasar"${L.length ? '' : ' disabled'}>Pasar ${L.length} ${L.length === 1 ? 'venta' : 'ventas'} a compras</button></div>
     <p class="sub" style="margin:0">${L.length ? `${L.length} ventas a cuenta (Deuda) desde el ${fd(desde)} todavía no figuran como compra, por ${money2(L.reduce((s, m) => s + Math.abs(Number(m.monto) || 0), 0))}. No se repiten las que ya tienen una compra con el mismo comprobante o la misma fecha y monto.` : `Todas las ventas a cuenta desde el ${fd(desde)} ya figuran como compra.`}</p></div>`);
+}
+
+// ---------- compra ↔ venta a cuenta ----------
+// Una compra cargada desde factura puede generar su movimiento "Deuda" en la cuenta corriente; quedan vinculadas por p.mov.
+const nuevoMovId = f => 'm-' + f + '-' + Math.random().toString(36).slice(2, 8);
+function movDeCompra(cid, p) {
+  return { f: p.f, cid, tipo: 'Deuda', monto: Math.abs(Number(p.m) || 0), comp: p.comp || '', medio: '', obs: p.n || '', creado: new Date().toISOString() };
+}
+const chkACuenta = (checked, texto) => `<label class="chk full"><input type="checkbox" name="aCuenta"${checked ? ' checked' : ''}> ${texto}</label>`;
+async function guardarMovDeCompra(cid, p) {
+  const id = nuevoMovId(p.f);
+  const ok = await write(() => db.collection('movimientos').doc(id).set(movDeCompra(cid, p)), 'Venta a cuenta registrada');
+  return ok ? id : null;
+}
+function modalBorrarCompra(cid, i) {
+  const c = S.clientes.get(cid), p = c && (c.compras || [])[i];
+  if (!p) return;
+  const mov = p.mov && S.movs.find(m => m.id === p.mov);
+  S.borrarCompra = { cid, i, orig: p };
+  openModal(`<h2>Borrar compra</h2>
+    <p style="margin:0">${esc(c.nombre)} · ${fd(p.f)} · <b>${money2(p.m)}</b>${p.n ? ' · ' + esc(p.n) : ''}</p>
+    <form class="grid" data-form="compra-borrar">
+    ${mov ? `<label class="chk full"><input type="checkbox" name="conMov" checked> Borrar también la venta a cuenta vinculada (${fd(mov.f)} · ${money2(mov.monto)}), así el saldo vuelve a como estaba</label>` : ''}
+    <p class="sub full" style="margin:0">No se puede deshacer. Si la compra se cargó mal, después podés volver a subir el comprobante.</p>
+    <div class="form-actions"><button type="button" class="btn" data-act="close-modal">Cancelar</button><button class="btn danger">Borrar compra</button></div></form>`);
 }
 
 // ---------- ficha del cliente ----------
@@ -1270,15 +1297,35 @@ document.addEventListener('submit', async e => {
       const upd = { ...orig, f: o.f, m, t: o.t, comp: o.comp, n: o.n };
       const its = edItems();
       if (its.length || (orig.items && orig.items.length)) upd.items = its;
+      const mov = upd.mov && S.movs.find(m => m.id === upd.mov);
+      if (mov && (mov.f !== upd.f || Math.abs(Number(mov.monto) - upd.m) > 0.004 || (mov.comp || '') !== (upd.comp || ''))) {
+        if (!await write(() => db.collection('movimientos').doc(mov.id).update({ f: upd.f, monto: Math.abs(upd.m), comp: upd.comp || '' }), 'Venta a cuenta actualizada')) return;
+      } else if (!mov && o.aCuenta) {
+        const movId = await guardarMovDeCompra(cid, upd); if (!movId) return; upd.mov = movId;
+      }
       compras[i] = upd;
-      if (await write(() => cref(cid).update({ compras }), 'Compra actualizada')) { S.editCompra = null; closeModal(); S.dirty = false; }
+      const data = { compras };
+      if (o.aCuenta && !c.cc) data.cc = true;
+      if (await write(() => cref(cid).update(data), 'Compra actualizada')) { S.editCompra = null; closeModal(); S.dirty = false; }
+    } else if (kind === 'compra-borrar' && S.borrarCompra) {
+      const { cid, i, orig } = S.borrarCompra, c = S.clientes.get(cid);
+      const compras = (c.compras || []).slice();
+      if (!compras[i] || compras[i].f !== orig.f || compras[i].m !== orig.m) { toast('La compra cambió. Cerrá y abrila de nuevo.', true); return; }
+      if (o.conMov && orig.mov && S.movs.some(m => m.id === orig.mov)) {
+        if (!await write(() => db.collection('movimientos').doc(orig.mov).delete(), 'Venta a cuenta borrada')) return;
+      }
+      compras.splice(i, 1);
+      if (await write(() => cref(cid).update({ compras }), 'Compra borrada')) { S.borrarCompra = null; closeModal(); S.dirty = false; }
     } else if (kind === 'compra-doc' && S.docDraft) {
       const { cid, r, asset, file } = S.docDraft, c = S.clientes.get(cid);
       const items = (Array.isArray(r.items) ? r.items.filter(x => x && x.descripcion) : [])
         .map((x, i) => o['it' + i] === false ? null : { d: String(x.descripcion), cod: x.codigo || '', mk: x.marca || '', c: num(x.cantidad), pu: num(x.precio_unitario), s: num(x.subtotal) })
         .filter(Boolean);
       const p = { f: o.f, m: Number(o.m), t: o.t, n: o.n, comp: o.comp, items, doc: asset ? asset.id : null, docNombre: file };
-      if (await write(() => cref(cid).update(addCompraData(c, p)), 'Compra guardada')) { S.docDraft = null; closeModal(); S.dirty = false; }
+      if (o.aCuenta) { const movId = await guardarMovDeCompra(cid, p); if (!movId) return; p.mov = movId; }
+      const data = addCompraData(c, p);
+      if (o.aCuenta && !c.cc) data.cc = true;
+      if (await write(() => cref(cid).update(data), o.aCuenta ? 'Compra y venta a cuenta guardadas' : 'Compra guardada')) { S.docDraft = null; closeModal(); S.dirty = false; }
     } else if (kind === 'mov') {
       const ent = findCliente(o.cliente);
       if (!ent) { toast('No encontré ese cliente. Elegilo de la lista.', true); return; }
@@ -1402,12 +1449,7 @@ document.addEventListener('click', async e => {
   else if (act === 'it-del') { a.closest('tr').remove(); edSuma(); }
   else if (act === 'it-add') { $('#ed-items').insertAdjacentHTML('beforeend', itemRow({}, 'new')); const r = $('#ed-items tr:last-child [name="d"]'); if (r) r.focus(); }
   else if (act === 'it-sum') { const t = edItems().reduce((s, x) => s + (Number(x.s) || 0), 0); const m = $('#modal-in [name="m"]'); if (m) m.value = Math.round(t * 100) / 100; }
-  else if (act === 'del-compra') {
-    if (!a.dataset.confirm) { a.dataset.confirm = '1'; a.textContent = 'Borrar'; a.style.color = 'var(--bad)'; return; }
-    const c = S.clientes.get(S.open), i = Number(a.dataset.i);
-    const compras = (c.compras || []).filter((_, j) => j !== i);
-    if (await write(() => cref(S.open).update({ compras }), 'Compra borrada')) S.dirty = false;
-  }
+  else if (act === 'del-compra') modalBorrarCompra(a.closest('#modal') && S.editCompra ? S.editCompra.cid : S.open, Number(a.dataset.i));
   else if (act === 'del-cliente') {
     if (!a.dataset.confirm) { a.dataset.confirm = '1'; a.textContent = 'Confirmar: borrar para siempre'; return; }
     const id = S.open;
