@@ -667,7 +667,8 @@ function renderCC() {
   let L = R.filter(r => (f.ver === 'deuda' ? r.saldo > 0.005 : f.ver === 'favor' ? r.saldo < -0.005 : true) && (!q || norm(r.c.nombre + ' ' + (r.c.codigo ?? '')).includes(q)));
   const nn = v => v == null ? -1 : v;
   L.sort(f.sort === 'codigo' ? (a, b) => (a.c.codigo ?? 1e9) - (b.c.codigo ?? 1e9) : f.sort === 'nombre' ? (a, b) => a.c.nombre.localeCompare(b.c.nombre) : f.sort === 'pago' ? (a, b) => nn(b.diasPago) - nn(a.diasPago) || b.saldo - a.saldo : (a, b) => b.saldo - a.saldo);
-  const rows = L.map(r => `<tr class="click" data-open="${esc(r.id)}">
+  // tocar un cliente acá muestra sus movimientos; la ficha completa queda para la pestaña Clientes
+  const rows = L.map(r => `<tr class="click" data-act="mov-ver" data-cid="${esc(r.id)}" title="Ver sus movimientos">
     <td class="n">${r.c.codigo ?? '—'}</td>
     <td><b>${esc(r.c.nombre)}</b><div class="sub">${esc(r.c.zona || '')}</div></td>
     <td class="n">${saldoTxt(r.saldo, r.diasPago)}</td>
@@ -677,7 +678,7 @@ function renderCC() {
     <td class="n">${r.n}</td>
     <td>${puedeMov() ? `<button class="btn sm" data-act="mov-new" data-tipo="Entrega" data-cid="${esc(r.id)}">+ Pago</button>` : ''}</td></tr>`).join('');
   $('#tab-dyn').innerHTML = `<div class="kpis">${tile('Total adeudado', money2(deben.reduce((s, r) => s + r.saldo, 0)), `${deben.length} clientes deben`)}${tile('Saldos a favor', money2(-favor.reduce((s, r) => s + r.saldo, 0)), `${favor.length} clientes`)}${tile('Cobrado este mes', money2(cobrado), 'Entregas cargadas')}${tile('Clientes a cuenta', R.length)}</div>
-    <section class="card" style="margin-top:14px"><div class="card-h"><h2>Cuentas corrientes<span class="count">${L.length} de ${R.length}</span></h2><span class="hint">Días sin entregar: 30 a 60 en amarillo, más de 60 en rojo. Tocá un cliente para ver su cuenta</span></div>
+    <section class="card" style="margin-top:14px"><div class="card-h"><h2>Cuentas corrientes<span class="count">${L.length} de ${R.length}</span></h2><span class="hint">Días sin entregar: 30 a 60 en amarillo, más de 60 en rojo. Tocá un cliente para ver sus movimientos</span></div>
     <div class="tbl-wrap"><table><thead><tr><th style="text-align:right">Cód.</th><th>Cliente</th><th style="text-align:right">Saldo</th><th>Dto.</th><th style="text-align:right">Último pago</th><th style="text-align:right">Sin pagar</th><th style="text-align:right">Movs.</th><th></th></tr></thead>
     <tbody>${rows || `<tr><td colspan="8" class="empty">${R.length ? 'Ningún cliente coincide con este filtro.' : 'Todavía no hay clientes con cuenta corriente. Marcalo en el perfil del cliente o cargá un movimiento.'}</td></tr>`}</tbody></table></div></section>`;
 }
@@ -704,7 +705,7 @@ function renderMov() {
   const sum = t => L.filter(m => m.tipo === t).reduce((s, m) => s + (Number(m.monto) || 0), 0);
   const max = S.expanded && S.expanded.movs ? L.length : 200;
   const rows = L.slice(0, max).map(m => { const c = S.clientes.get(m.cid); return `<tr>
-    <td class="n">${fd(m.f)}</td><td class="n">${c && c.codigo != null ? c.codigo : '—'}</td><td>${nmId(m.cid, c)}</td>
+    <td class="n">${fd(m.f)}</td><td class="n">${c && c.codigo != null ? c.codigo : '—'}</td><td><button class="nm" data-act="mv-cliente" data-cid="${esc(m.cid)}" title="Ver solo sus movimientos">${esc(c ? c.nombre : 'Cliente borrado')}</button></td>
     <td>${esc(m.comp || '')}</td><td>${pill(m.tipo, MOV_CLS[m.tipo] || '')}</td><td class="n">${money2(m.monto)}</td>
     <td>${esc(m.medio || '')}</td><td>${puedeMov() ? `<input class="obs-in" data-id="${esc(m.id)}" value="${esc(m.obs || '')}" placeholder="Agregar…" aria-label="Observaciones" title="Tocá para editar. Enter guarda, Esc cancela">` : esc(m.obs || '')}</td>
     <td>${puedeMov() ? `<button class="btn sm ghost" data-act="del-mov" data-id="${esc(m.id)}" aria-label="Borrar movimiento">✕</button>` : ''}</td></tr>`; }).join('');
@@ -1423,6 +1424,7 @@ document.addEventListener('click', async e => {
     finally { a.disabled = false; }
   }
   else if (act === 'doc-cancel') { if (docCtl) docCtl.abort(); closeModal(); }
+  else if (act === 'mv-cliente') { const c = S.clientes.get(a.dataset.cid); S.mv.q = c ? c.nombre : ''; renderMovStatic(); renderMov(); }
   else if (act === 'mov-new' && !puedeMov()) toast(SOLO_MOV, true);
   else if (act === 'mov-new') modalMov(a.dataset.cid || (S.open && a.closest('#drawer') ? S.open : null), a.dataset.tipo);
   else if (act === 'cc-ver') { S.cc.ver = a.dataset.v; renderCCStatic(); renderCC(); }
