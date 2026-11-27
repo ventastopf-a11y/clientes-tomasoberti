@@ -587,7 +587,7 @@ function renderAjustes() {
   const c = S.cfg;
   const n = (id, l, v, extra = '') => `<label class="f">${l}<input type="number" name="${id}" value="${esc(v)}" min="0" ${extra}></label>`;
   $('#tab-static').innerHTML = '';
-  $('#tab-dyn').innerHTML = respaldoCard() + card('Reglas de la cartera', 'Los cambios se aplican para todos', `<div class="card-b"><form class="grid" data-form="cfg">
+  $('#tab-dyn').innerHTML = respaldoCard() + ventasCard() + card('Reglas de la cartera', 'Los cambios se aplican para todos', `<div class="card-b"><form class="grid" data-form="cfg">
     ${n('minimo', 'Compra mínima mayorista ($)', c.minimo, 'step="1000"')}${n('ventana', 'Días para completar el mínimo', c.ventana)}
     ${n('activo', 'Activo hasta (días sin comprar)', c.activo)}${n('riesgo', 'En riesgo hasta', c.riesgo)}${n('dormido', 'Dormido hasta (después: Perdido)', c.dormido)}
     ${n('metaRecup', 'Meta: recuperados', c.metaRecup)}${n('metaVolver', 'Meta: volver a mayorista', c.metaVolver)}${n('metaNuevos', 'Meta: clientes nuevos', c.metaNuevos)}
@@ -707,6 +707,7 @@ function modalMov(cid, tipo) {
     <label class="f">Tipo<select name="tipo">${MOV_TIPOS.map(v => `<option${v === t ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
     <label class="f">Monto ($)<input type="number" name="monto" step="0.01" required placeholder="500000"></label>
     <label class="f">Medio de pago<select name="medio">${opts(MEDIOS, '')}</select></label>
+    <label class="chk full" id="mv-compra"${t === 'Deuda' ? '' : ' hidden'}><input type="checkbox" name="comoCompra" checked> Registrar también como compra mayorista</label>
     <label class="f full">Factura o NV (opcional)<input name="comp" placeholder="Ej.: COT-11-574"></label>
     <label class="f full">Observaciones (opcional)<input name="obs" placeholder="Ej.: entrega al paraguayo"></label>
     <p class="sub full" style="margin:0">Deuda suma al saldo y Entrega lo resta: cargá el monto sin signo. En Ajuste, un monto negativo resta y uno positivo suma.</p>
@@ -1035,6 +1036,23 @@ function edSuma() {
   el.textContent = its.length ? `${its.length} artículos · suman ${money2(t)}` : '';
 }
 
+// ---------- ventas a cuenta que también son compras ----------
+// Una "Venta a cuenta" (Deuda) puede registrarse además como compra mayorista; la compra guarda el id del movimiento.
+const compraDeMov = m => ({ f: m.f, m: Math.abs(Number(m.monto) || 0), t: 'mayorista', n: m.comp ? 'Venta a cuenta ' + m.comp : 'Venta a cuenta', comp: m.comp || '', mov: m.id });
+const yaEsCompra = (c, m) => (c.compras || []).some(p => p.mov === m.id
+  || (p.comp && m.comp && norm(p.comp) === norm(m.comp))
+  || (p.f === m.f && Math.abs((p.m || 0) - Math.abs(Number(m.monto) || 0)) < 1));
+function ventasSinCompra(desde) {
+  return S.movs.filter(m => m.tipo === 'Deuda' && m.f >= desde && S.clientes.has(m.cid) && !yaEsCompra(S.clientes.get(m.cid), m)).sort((a, b) => (a.f < b.f ? -1 : 1));
+}
+function ventasCard() {
+  const desde = S.vacDesde || '2026-11-26', L = ventasSinCompra(desde);
+  return card('Ventas a cuenta → compras', 'Para que las ventas a cuenta también cuenten como compra mayorista',
+    `<div class="card-b" style="display:grid;gap:10px"><div class="filters"><label class="sub">Desde <input type="date" id="vac-desde" value="${esc(desde)}"></label>
+    <button class="btn primary" data-act="vac-pasar"${L.length ? '' : ' disabled'}>Pasar ${L.length} ${L.length === 1 ? 'venta' : 'ventas'} a compras</button></div>
+    <p class="sub" style="margin:0">${L.length ? `${L.length} ventas a cuenta (Deuda) desde el ${fd(desde)} todavía no figuran como compra, por ${money2(L.reduce((s, m) => s + Math.abs(Number(m.monto) || 0), 0))}. No se repiten las que ya tienen una compra con el mismo comprobante o la misma fecha y monto.` : `Todas las ventas a cuenta desde el ${fd(desde)} ya figuran como compra.`}</p></div>`);
+}
+
 // ---------- ficha del cliente ----------
 function suggestTpl(d) {
   if (d.minimo && d.minimo.estado === 'abierto') return 'min';
@@ -1271,7 +1289,9 @@ document.addEventListener('submit', async e => {
       const doc = { f: o.f, cid, tipo: o.tipo, monto, comp: o.comp, medio: o.medio, obs: o.obs, creado: new Date().toISOString() };
       if (await write(() => db.collection('movimientos').doc(id).set(doc), o.tipo === 'Entrega' ? 'Pago guardado' : 'Movimiento guardado')) {
         closeModal();
-        if (!c.cc) await write(() => cref(cid).update({ cc: true }), 'Movimiento guardado');
+        const data = c.cc ? {} : { cc: true };
+        if (o.tipo === 'Deuda' && o.comoCompra) Object.assign(data, addCompraData(c, compraDeMov({ ...doc, id })));
+        if (Object.keys(data).length) await write(() => cref(cid).update(data), data.compras ? 'Venta y compra guardadas' : 'Movimiento guardado');
       }
     } else if (kind === 'ingreso') {
       const id = 'i-' + o.fecha + '-' + slug(o.producto).slice(0, 24) + '-' + Math.random().toString(36).slice(2, 5);
@@ -1295,6 +1315,8 @@ document.addEventListener('change', e => {
   if (t.id === 'tpl-sel') { S.tpl = t.value; const d = D.get(S.open); $('#tpl-txt').textContent = fillTpl(t.value, d); return; }
   if (t.closest('#drawer form')) S.dirty = true;
   if (t.id === 'r-camp') { S.rec.camp = t.value; renderRecuperar(); }
+  if (t.name === 'tipo' && t.closest('form[data-form="mov"]')) { const w = $('#mv-compra'); if (w) w.hidden = t.value !== 'Deuda'; return; }
+  if (t.id === 'vac-desde') { S.vacDesde = t.value || '2026-11-26'; renderDyn(); return; }
   if (t.id === 'doc-in') { const f = t.files && t.files[0]; t.value = ''; if (f && S.open) processDoc(f, S.open); return; }
   if (t.id === 'mv-viejos') { S.mv.viejos = t.checked; renderDyn(); return; }
   const ccmap = { 'cc-sort': ['cc', 'sort'], 'mv-tipo': ['mv', 'tipo'], 'mv-desde': ['mv', 'desde'], 'mv-hasta': ['mv', 'hasta'] };
@@ -1360,6 +1382,20 @@ document.addEventListener('click', async e => {
   else if (act === 'del-ing') {
     if (a.dataset.confirm) { await write(() => db.collection('ingresos').doc(a.dataset.ing).delete(), 'Ingreso borrado'); }
     else { a.dataset.confirm = '1'; a.textContent = 'Tocá de nuevo para borrar'; a.classList.add('danger'); }
+  }
+  else if (act === 'vac-pasar') {
+    const L = ventasSinCompra(S.vacDesde || '2026-11-26');
+    if (!L.length) return;
+    if (!a.dataset.confirm) { a.dataset.confirm = '1'; a.textContent = `Confirmar: crear ${L.length} compras`; return; }
+    a.disabled = true;
+    const porCliente = new Map();
+    for (const m of L) { if (!porCliente.has(m.cid)) porCliente.set(m.cid, []); porCliente.get(m.cid).push(compraDeMov(m)); }
+    let ok = 0;
+    for (const [cid, nuevas] of porCliente) {
+      const c = S.clientes.get(cid);
+      if (await write(() => cref(cid).update({ compras: [...(c.compras || []), ...nuevas] }), 'Compras creadas')) ok += nuevas.length;
+    }
+    toast(`${ok} ventas a cuenta pasadas a compras`); renderDyn();
   }
   else if (act === 'edit-compra') modalEditCompra(S.open, Number(a.dataset.i));
   else if (act === 'it-del') { a.closest('tr').remove(); edSuma(); }
