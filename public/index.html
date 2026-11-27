@@ -995,6 +995,46 @@ function respaldoAviso() {
   return `<div class="alertbox warn" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span><b>${d == null ? 'Todavía no hay un respaldo descargado' : `Hace ${d} días que no descargás un respaldo`}</b> · conviene hacerlo una vez por semana.</span><button class="btn sm" data-act="backup-xlsx">Descargar respaldo</button></div>`;
 }
 
+// ---------- editar una compra (factura o cotización cargada) ----------
+const itemRow = (x, k) => `<tr data-row="${k}">
+  <td><input name="c" type="number" step="any" min="0" value="${esc(x.c ?? '')}" aria-label="Cantidad" style="width:64px"></td>
+  <td><input name="d" value="${esc(x.d || '')}" aria-label="Artículo" style="width:100%;min-width:180px"></td>
+  <td><input name="mk" value="${esc(x.mk || '')}" aria-label="Marca" style="width:100px"></td>
+  <td><input name="s" type="number" step="0.01" value="${esc(x.s ?? '')}" aria-label="Importe" style="width:110px;text-align:right"></td>
+  <td><button type="button" class="btn sm ghost" data-act="it-del" aria-label="Quitar artículo">✕</button></td></tr>`;
+function modalEditCompra(cid, i) {
+  const c = S.clientes.get(cid), p = c && (c.compras || [])[i];
+  if (!p) { toast('No encontré esa compra. Recargá la página.', true); return; }
+  S.editCompra = { cid, i, orig: p };
+  const items = p.items || [];
+  openModal(`<h2>Editar compra</h2>
+    <p class="sub" style="margin:0">${esc(c.nombre)}${p.docNombre ? ` · ${esc(p.docNombre)}` : ''}${p.doc ? ` · <a href="/_blob/${encodeURIComponent(p.doc)}" target="_blank" rel="noopener">Ver comprobante</a>` : ''}</p>
+    <form class="grid" data-form="compra-edit">
+    <label class="f">Fecha<input type="date" name="f" value="${esc(p.f)}" required></label>
+    <label class="f">Monto total ($)<input type="number" name="m" step="0.01" min="0" value="${esc(p.m ?? '')}" required></label>
+    <label class="f">Tipo<select name="t">${TIPOS.replace(`value="${esc(p.t || 'mayorista')}"`, `value="${esc(p.t || 'mayorista')}" selected`)}</select></label>
+    <label class="f">Comprobante<input name="comp" value="${esc(p.comp || '')}" placeholder="Ej.: FCB-0011-00015481"></label>
+    <label class="f full">Detalle<input name="n" value="${esc(p.n || '')}"></label>
+    <div class="full tbl-wrap"><table class="items"><thead><tr><th>Cant.</th><th>Artículo</th><th>Marca</th><th style="text-align:right">Importe</th><th></th></tr></thead>
+      <tbody id="ed-items">${items.map((x, k) => itemRow(x, k)).join('')}</tbody></table></div>
+    <div class="full chips"><button type="button" class="btn sm" data-act="it-add">+ Agregar artículo</button><button type="button" class="btn sm" data-act="it-sum">Usar la suma de los artículos como monto</button><span class="sub" id="ed-suma"></span></div>
+    <div class="form-actions"><button type="button" class="btn" data-act="close-modal">Cancelar</button><button class="btn primary">Guardar cambios</button></div></form>`);
+  edSuma();
+}
+function edItems() {
+  return [...document.querySelectorAll('#ed-items tr')].map(tr => {
+    const v = n => tr.querySelector(`[name="${n}"]`).value.trim();
+    const orig = tr.dataset.row !== 'new' && S.editCompra.orig.items ? S.editCompra.orig.items[Number(tr.dataset.row)] || {} : {};
+    const c = v('c') === '' ? null : Number(v('c')), s = v('s') === '' ? null : Number(v('s'));
+    return { ...orig, d: v('d'), mk: v('mk'), c, s };
+  }).filter(x => x.d);
+}
+function edSuma() {
+  const el = $('#ed-suma'); if (!el) return;
+  const its = edItems(), t = its.reduce((a, x) => a + (Number(x.s) || 0), 0);
+  el.textContent = its.length ? `${its.length} artículos · suman ${money2(t)}` : '';
+}
+
 // ---------- ficha del cliente ----------
 function suggestTpl(d) {
   if (d.minimo && d.minimo.estado === 'abierto') return 'min';
@@ -1074,7 +1114,7 @@ function renderDrawer() {
   ${drawerArticulos(d)}
 
   <section class="card"><div class="card-h"><h2>Compras<span class="count">${compras.length}</span></h2><span class="hint">Web y minorista no suman al mínimo</span></div><div class="card-b">
-    ${compras.length ? `<ul class="hist">${compras.map(p => { const i = (c.compras || []).indexOf((c.compras || []).find(x => x.f === p.f && x.m === p.m && x.t === p.t && (x.n || '') === (p.n || ''))); return `<li><span class="mono">${fd(p.f)}</span><span>${TIPO_LBL[p.t] ? pill(TIPO_LBL[p.t]) + ' ' : ''}${esc(p.n || '')}${compraExtra(p)}</span><b class="mono">${money(p.m)}</b><button class="x" data-act="del-compra" data-i="${i}" aria-label="Borrar compra">✕</button></li>`; }).join('')}</ul>` : '<div class="sub">Sin compras cargadas.</div>'}</div></section>
+    ${compras.length ? `<ul class="hist">${compras.map(p => { const i = (c.compras || []).indexOf(p); return `<li><span class="mono">${fd(p.f)}</span><span>${TIPO_LBL[p.t] ? pill(TIPO_LBL[p.t]) + ' ' : ''}${esc(p.n || '')}${compraExtra(p)}</span><b class="mono">${money(p.m)}</b><span style="white-space:nowrap"><button class="x" data-act="edit-compra" data-i="${i}" aria-label="Editar compra" title="Editar">✎</button><button class="x" data-act="del-compra" data-i="${i}" aria-label="Borrar compra" title="Borrar">✕</button></span></li>`; }).join('')}</ul>` : '<div class="sub">Sin compras cargadas.</div>'}</div></section>
 
   <section class="card"><div class="card-h"><h2>Contactos<span class="count">${d.contactos.length}</span></h2>${c.primerContacto ? `<span class="hint">Primer contacto ${fd(c.primerContacto)}</span>` : ''}</div><div class="card-b">
     ${d.contactos.length ? `<ul class="hist">${d.contactos.slice().reverse().map(x => `<li style="grid-template-columns:74px minmax(0,1fr)"><span class="mono">${fd(x.f)}</span><span>${esc(x.n)}</span></li>`).join('')}</ul>` : '<div class="sub">Todavía no se lo contactó desde la cartera.</div>'}
@@ -1202,6 +1242,17 @@ document.addEventListener('submit', async e => {
       if (!entry) { toast('No encontré ese cliente. Elegilo de la lista o crealo con + Cliente.', true); return; }
       const [id, c] = entry;
       if (await write(() => cref(id).update(addCompraData(c, { f: o.f, m: Number(o.m), t: o.t, n: o.n })), 'Compra guardada')) { closeModal(); openDrawer(id); }
+    } else if (kind === 'compra-edit' && S.editCompra) {
+      const { cid, i, orig } = S.editCompra, c = S.clientes.get(cid);
+      const compras = (c.compras || []).slice();
+      if (!compras[i] || compras[i].f !== orig.f || compras[i].m !== orig.m) { toast('La compra cambió mientras la editabas. Cerrá y abrila de nuevo.', true); return; }
+      const m = Number(o.m);
+      if (!isFinite(m) || m < 0) { toast('Revisá el monto.', true); return; }
+      const upd = { ...orig, f: o.f, m, t: o.t, comp: o.comp, n: o.n };
+      const its = edItems();
+      if (its.length || (orig.items && orig.items.length)) upd.items = its;
+      compras[i] = upd;
+      if (await write(() => cref(cid).update({ compras }), 'Compra actualizada')) { S.editCompra = null; closeModal(); S.dirty = false; }
     } else if (kind === 'compra-doc' && S.docDraft) {
       const { cid, r, asset, file } = S.docDraft, c = S.clientes.get(cid);
       const items = (Array.isArray(r.items) ? r.items.filter(x => x && x.descripcion) : [])
@@ -1233,6 +1284,7 @@ document.addEventListener('submit', async e => {
 });
 
 document.addEventListener('input', e => { if (e.target.closest('#drawer form')) S.dirty = true; });
+document.addEventListener('input', e => { if (e.target.closest('#ed-items')) edSuma(); });
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.classList && t.classList.contains('obs-in')) {
@@ -1309,6 +1361,10 @@ document.addEventListener('click', async e => {
     if (a.dataset.confirm) { await write(() => db.collection('ingresos').doc(a.dataset.ing).delete(), 'Ingreso borrado'); }
     else { a.dataset.confirm = '1'; a.textContent = 'Tocá de nuevo para borrar'; a.classList.add('danger'); }
   }
+  else if (act === 'edit-compra') modalEditCompra(S.open, Number(a.dataset.i));
+  else if (act === 'it-del') { a.closest('tr').remove(); edSuma(); }
+  else if (act === 'it-add') { $('#ed-items').insertAdjacentHTML('beforeend', itemRow({}, 'new')); const r = $('#ed-items tr:last-child [name="d"]'); if (r) r.focus(); }
+  else if (act === 'it-sum') { const t = edItems().reduce((s, x) => s + (Number(x.s) || 0), 0); const m = $('#modal-in [name="m"]'); if (m) m.value = Math.round(t * 100) / 100; }
   else if (act === 'del-compra') {
     if (!a.dataset.confirm) { a.dataset.confirm = '1'; a.textContent = 'Borrar'; a.style.color = 'var(--bad)'; return; }
     const c = S.clientes.get(S.open), i = Number(a.dataset.i);
