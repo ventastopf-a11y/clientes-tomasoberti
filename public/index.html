@@ -223,7 +223,10 @@ const slug = s => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slic
 const byF = (a, b) => a.f < b.f ? -1 : a.f > b.f ? 1 : 0;
 const digits = t => String(t || '').replace(/\D/g, '');
 
-const CAMP = ['Activo', 'Dormido', 'Volver a mayorista', 'Prospecto', 'Sin campaña'];
+const CAMP = ['Activo', 'Volver a mayorista', 'Clientes nuevos', 'Sin campaña'];
+// campañas que ya no existen: Dormido pasa a Sin campaña (el estado ya dice si está en riesgo o perdido) y Prospecto se llama Clientes nuevos
+const CAMP_VIEJA = { 'Dormido': 'Sin campaña', 'Prospecto': 'Clientes nuevos' };
+const normCamp = c => (c && CAMP_VIEJA[c.campana] ? { ...c, campana: CAMP_VIEJA[c.campana], campanaAnterior: c.campanaAnterior || c.campana } : c);
 const ETAPA = ['', 'Sin contactar', 'Contactado', 'Interesado', 'Compró', 'Inactivo'];
 const PAGO = ['', 'Cuenta corriente', 'Transferencia', 'Efectivo', 'Mixto'];
 const COMO = ['', 'WhatsApp', 'Web', 'Visita de Tomás', 'Retira en local', 'Otro'];
@@ -241,10 +244,10 @@ const TPL = [
   { id: 'repo', camp: 'Activo', ver: 'Reposición', txt: FIRMA + '¿Cómo te fue con [PRODUCTO/MARCA] que llevaste la última vez? Imagino que ya te estarás quedando corto con algo. ¿Querés que te arme el pedido para reponer?' },
   { id: 'nov', camp: 'Activo', ver: 'Novedad', txt: FIRMA + 'Te escribo porque nos entró [PRODUCTO/MARCA] y me acordé de vos, va bien con lo que venís usando. ¿Querés que te pase precios? Si te falta reponer algo más, lo sumamos al mismo envío.' },
   { id: 'min', camp: 'Todas', ver: 'Completar el mínimo', txt: FIRMA + 'Te recuerdo que para mantener el precio mayorista te faltan [FALTA] para llegar al mínimo de [MINIMO] en 30 días (tenés hasta el [FECHA]). ¿Querés que te arme un pedido con lo que solés llevar?' },
-  { id: 'ding', camp: 'Dormido', ver: 'Con ingreso concreto', txt: FIRMA + '¿Cómo viene el laburo en el estudio?\nTe escribo porque esta semana nos entra [PRODUCTO/MARCA], que es lo que venías llevando. ¿Querés que te pase precios o te separo algo?' },
-  { id: 'drec', camp: 'Dormido', ver: 'Reconectar', txt: FIRMA + 'Hace rato no sabemos de vos, ¿cómo viene el estudio? ¿Seguís trabajando con las mismas marcas?\nContame y vemos si te podemos dar una mano con algo.' },
-  { id: 'dcor', camp: 'Dormido', ver: 'Corto y directo', txt: FIRMA + 'Estoy actualizando nuestra lista de clientes y quería saber si seguís con el estudio, así te sigo pasando novedades y precios. ¡Gracias!' },
-  { id: 'dvia', camp: 'Dormido', ver: 'Viaje de Tomás', txt: FIRMA + 'Tomás va a estar por [CIUDAD] el [FECHA], ¿te viene bien que pase por el estudio?' },
+  { id: 'ding', camp: 'Recuperar', ver: 'Con ingreso concreto', txt: FIRMA + '¿Cómo viene el laburo en el estudio?\nTe escribo porque esta semana nos entra [PRODUCTO/MARCA], que es lo que venías llevando. ¿Querés que te pase precios o te separo algo?' },
+  { id: 'drec', camp: 'Recuperar', ver: 'Reconectar', txt: FIRMA + 'Hace rato no sabemos de vos, ¿cómo viene el estudio? ¿Seguís trabajando con las mismas marcas?\nContame y vemos si te podemos dar una mano con algo.' },
+  { id: 'dcor', camp: 'Recuperar', ver: 'Corto y directo', txt: FIRMA + 'Estoy actualizando nuestra lista de clientes y quería saber si seguís con el estudio, así te sigo pasando novedades y precios. ¡Gracias!' },
+  { id: 'dvia', camp: 'Recuperar', ver: 'Viaje de Tomás', txt: FIRMA + 'Tomás va a estar por [CIUDAD] el [FECHA], ¿te viene bien que pase por el estudio?' },
   { id: 'vaho', camp: 'Volver a mayorista', ver: 'Mostrar el ahorro', txt: FIRMA + 'Vi que últimamente venís comprando por minorista y quería comentarte que, si juntás todo en un pedido mayorista, te sale bastante más barato. Si querés te armo una lista con lo que solés usar a precio mayorista y vemos juntos cómo llegar al mínimo. ¿Te la paso?' },
   { id: 'vben', camp: 'Volver a mayorista', ver: 'Con beneficio (OK de Tomás)', txt: FIRMA + 'Para que vuelvas a aprovechar los precios mayoristas, en tu próximo pedido mayorista te ofrecemos [envío bonificado / combo Inkplay], hasta el [FECHA]. ¿Querés que te arme uno con lo que solés llevar?' },
   { id: 'rec', camp: 'Todas', ver: 'Recordatorio', txt: 'Hola [Nombre], ¿cómo va? Te escribo de nuevo por si se te pasó el mensaje 😊 [Una línea con el motivo]. Cualquier cosa, acá estoy.' },
@@ -366,7 +369,7 @@ function derive(id, c) {
 
   // prioridad para recuperar
   const recent = diasMay != null && diasMay <= cfg.activo;
-  const pool = !recent && (dias != null || ['Dormido', 'Volver a mayorista'].includes(c.campana)) && c.campana !== 'Prospecto';
+  const pool = !recent && (dias != null || c.campana === 'Volver a mayorista') && c.campana !== 'Clientes nuevos';
   let score = 0; const why = [];
   if (pool) {
     const dd = diasMay;
@@ -1096,7 +1099,7 @@ function modalBorrarCompra(cid, i) {
 // ---------- ficha del cliente ----------
 function suggestTpl(d) {
   if (d.minimo && d.minimo.estado === 'abierto') return 'min';
-  if (d.ings.length) return d.c.campana === 'Dormido' ? 'ding' : 'nov';
+  if (d.ings.length) return ['En riesgo', 'Perdido'].includes(d.estado) ? 'ding' : 'nov';
   if (d.c.campana === 'Volver a mayorista') return 'vaho';
   if (d.diasMay != null && d.diasMay <= S.cfg.riesgo) return 'repo';
   if (d.diasMay != null && d.diasMay <= 365) return 'drec';
@@ -1427,7 +1430,7 @@ document.addEventListener('click', async e => {
   else if (act === 'copy-text') copy(a.dataset.text);
   else if (act === 'copy-msg') copy($('#tpl-txt').textContent);
   else if (act === 'copy-tpl') copy(TPL.find(t => t.id === a.dataset.tpl).txt);
-  else if (act === 'copy-ing') { const g = S.ingresos.find(x => x.id === a.dataset.ing), d = D.get(a.dataset.cid); copy(fillTpl(d.c.campana === 'Dormido' ? 'ding' : 'nov', d, g.producto)); }
+  else if (act === 'copy-ing') { const g = S.ingresos.find(x => x.id === a.dataset.ing), d = D.get(a.dataset.cid); copy(fillTpl(['En riesgo', 'Perdido'].includes(d.estado) ? 'ding' : 'nov', d, g.producto)); }
   else if (act === 'avisado') {
     const g = S.ingresos.find(x => x.id === a.dataset.ing), id = a.dataset.cid, c = S.clientes.get(id);
     a.disabled = true;
@@ -1544,7 +1547,7 @@ renderStatic();
   const onErr = e => { clearTimeout(timer); banner(e && e.code === 'revoked' ? 'Ya no tenés acceso a esta base.' : 'Se cortó la conexión con la base. Recargá la página.'); };
   db.collection('clientes').onSnapshot(snap => {
     if (!snap.metadata.fromCache) { clearTimeout(timer); banner(''); }
-    S.clientes = new Map(snap.docs.map(d => [d.id, d.data()]));
+    S.clientes = new Map(snap.docs.map(d => [d.id, normCamp(d.data())]));
     S.loaded.c = true; refresh();
   }, onErr);
   window.claude.use('sample').then(f => { SAMPLE = f; if (S.open) refresh(); }).catch(() => {});
