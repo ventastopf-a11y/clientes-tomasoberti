@@ -228,10 +228,13 @@ const ETAPA = ['', 'Sin contactar', 'Contactado', 'Interesado', 'Compró', 'Inac
 const PAGO = ['', 'Cuenta corriente', 'Transferencia', 'Efectivo', 'Mixto'];
 const COMO = ['', 'WhatsApp', 'Web', 'Visita de Tomás', 'Retira en local', 'Otro'];
 const ZONAS = ['', 'Buenos Aires (CABA/GBA)', 'Córdoba', 'Rosario', 'Santa Fe', 'Resto del país', 'Exterior'];
-const DEF = { minimo: 1000000, ventana: 30, activo: 45, riesgo: 90, dormido: 180, metaRecup: 15, metaVolver: 5, metaNuevos: 10, desde: '2026-11-01', hasta: '2027-02-15' };
+// activo = días sin compra mayorista para contar como recuperado (no es el estado)
+// eFrec/eAct/eRiesgo = estados por días desde la última compra; rc* = cada cuántos días recontactar según el estado
+const DEF = { minimo: 1000000, ventana: 30, activo: 45, riesgo: 90, eFrec: 30, eAct: 60, eRiesgo: 90, rcFrec: 15, rcAct: 30, rcRiesgo: 60, rcPerd: 90, metaRecup: 15, metaVolver: 5, metaNuevos: 10, desde: '2026-11-01', hasta: '2027-02-15' };
 const TIPOS = '<option value="mayorista">Mayorista</option><option value="minorista">Minorista</option><option value="web">Página web (minorista)</option>';
 const TIPO_LBL = { minorista: 'Minorista', web: 'Web' };
-const ESTADO_CLS = { 'Activo': 'ok', 'Frecuente': 'ok', 'En riesgo': 'warn', 'Dormido': 'sleep', 'Perdido': 'bad', 'Sin dato': '' };
+const ESTADO_CLS = { 'Frecuente': 'ok', 'Activo': 'info', 'En riesgo': 'warn', 'Perdido': 'bad', 'Sin dato': '' };
+const ESTADOS = ['Frecuente', 'Activo', 'En riesgo', 'Perdido', 'Sin dato'];
 
 const FIRMA = 'Hola [Nombre], ¿cómo estás? Soy Pauli, de Tomás Oberti Supplies 😊\n';
 const TPL = [
@@ -273,8 +276,9 @@ function derive(id, c) {
   const dias = last ? diff(pd(last.f), TODAY) : null;
   const diasMay = lastMay ? diff(pd(lastMay.f), TODAY) : null;
   let estado;
-  if (dias == null) estado = c.campana === 'Activo' ? 'Frecuente' : 'Sin dato';
-  else estado = dias <= cfg.activo ? 'Activo' : dias <= cfg.riesgo ? 'En riesgo' : dias <= cfg.dormido ? 'Dormido' : 'Perdido';
+  if (dias == null) estado = 'Sin dato';
+  else estado = dias <= cfg.eFrec ? 'Frecuente' : dias <= cfg.eAct ? 'Activo' : dias <= cfg.eRiesgo ? 'En riesgo' : 'Perdido';
+  const cadaRecontacto = { 'Frecuente': cfg.rcFrec, 'Activo': cfg.rcAct, 'En riesgo': cfg.rcRiesgo, 'Perdido': cfg.rcPerd }[estado] || null;
   const conMonto = may.filter(x => x.m != null);
   const u3 = conMonto.slice(-3);
   const ticket = u3.length ? u3.reduce((s, x) => s + x.m, 0) / u3.length : null;
@@ -352,6 +356,12 @@ function derive(id, c) {
     al.push({ k: 'repo', cls: diasProx < 0 ? 'warn' : 'info', t: diasProx < 0 ? `Reposición atrasada ${-diasProx} d` : diasProx === 0 ? 'Le toca comprar hoy' : `Le toca comprar en ${diasProx} d`, w: diasProx < 0 ? 75 : 55 });
   }
   for (const x of ings) al.push({ k: 'ing', cls: 'ok', t: (x.espera ? 'Lo espera: ' : 'Ingresó ') + x.g.producto, w: x.espera ? 78 : 50 });
+  // recontacto según el estado: se cuenta desde el último contacto o la última compra, lo más reciente
+  const ultToque = [ultContacto, last && last.f].filter(Boolean).sort().at(-1) || null;
+  const diasToque = ultToque ? diff(pd(ultToque), TODAY) : null;
+  const agendado = c.fechaProx && c.fechaProx >= HOY;
+  const recon = cadaRecontacto && diasToque != null && diasToque >= cadaRecontacto && !agendado && c.etapa !== 'Inactivo' ? { dias: diasToque, cada: cadaRecontacto } : null;
+  if (recon) al.push({ k: 'recon', cls: estado === 'Perdido' ? 'bad' : estado === 'En riesgo' ? 'warn' : 'info', t: `Recontactar (${estado.toLowerCase()}, hace ${diasToque} d)`, w: 62 });
   const atencion = al.reduce((m, a) => Math.max(m, a.w), 0);
 
   // prioridad para recuperar
@@ -362,7 +372,6 @@ function derive(id, c) {
     const dd = diasMay;
     if (dd == null) { score += c.campana === 'Volver a mayorista' ? 20 : 0; if (c.campana === 'Volver a mayorista') why.push('Compra minorista'); }
     else if (dd <= cfg.riesgo) { score += 35; why.push(`${dd} días sin comprar`); }
-    else if (dd <= cfg.dormido) { score += 25; why.push(`${dd} días sin comprar`); }
     else if (dd <= 365) { score += 12; why.push(`${Math.round(dd / 30)} meses sin comprar`); }
     else { score += 4; why.push(`${Math.round(dd / 30)} meses sin comprar`); }
     if (c.campana === 'Volver a mayorista' && dias != null && dias <= cfg.riesgo) { score += 10; why.push('Sigue comprando minorista'); }
@@ -385,7 +394,7 @@ function derive(id, c) {
   const vel = !pool ? null : score >= 60 ? 'Rápida' : score >= 40 ? 'Media' : 'Lenta';
 
   return { id, c, compras, may, last, lastMay, dias, diasMay, estado, ticket, total12, ped, cada, cadaCalc, prox, diasProx, minimo, recup, volvio, nuevo,
-    contactos, ultContacto, recontactado, ings, al: al.sort((a, b) => b.w - a.w), atencion, pool, score, why, vel };
+    contactos, ultContacto, recontactado, recon, cadaRecontacto, ings, al: al.sort((a, b) => b.w - a.w), atencion, pool, score, why, vel };
 }
 
 function recompute() {
@@ -431,6 +440,7 @@ function renderHoy() {
   const seg = A.filter(d => d.al.some(a => a.k === 'seg')).sort((a, b) => (a.c.fechaProx < b.c.fechaProx ? -1 : 1));
   const min = A.filter(d => d.minimo && d.minimo.estado === 'abierto').sort((a, b) => a.minimo.rest - b.minimo.rest);
   const repo = A.filter(d => d.al.some(a => a.k === 'repo')).sort((a, b) => a.diasProx - b.diasProx);
+  const rec = A.filter(d => d.recon).sort((a, b) => ESTADOS.indexOf(a.estado) - ESTADOS.indexOf(b.estado) || (b.recon.dias - b.recon.cada) - (a.recon.dias - a.recon.cada));
   const pend = A.filter(d => d.c.pendiente);
   const ingN = ING.map(g => ({ g, n: A.filter(d => d.ings.some(x => x.g.id === g.id)).length })).filter(x => x.n);
   const top = A.filter(d => d.pool && d.c.etapa !== 'Inactivo' && !d.c.fechaProx).sort((a, b) => b.score - a.score).slice(0, 8);
@@ -449,6 +459,7 @@ function renderHoy() {
     card('Mínimo en curso', `Deben sumar ${money(S.cfg.minimo)} en ${S.cfg.ventana} días`, list(min, minRow, 'Nadie tiene un mínimo abierto.', 10, 'min'), min.length) +
     card('Avisar ingresos', 'A quién le interesa lo que llegó', ingBody, ingN.reduce((s, x) => s + x.n, 0)) +
     card('Les toca comprar', 'Según cada cuánto compra cada uno', list(repo, repoRow, 'Ningún cliente tiene la reposición cerca.', 10, 'repo'), repo.length) +
+    card('Recontactar', `Frecuentes c/${S.cfg.rcFrec} d · activos c/${S.cfg.rcAct} d · en riesgo c/${S.cfg.rcRiesgo} d · perdidos c/${S.cfg.rcPerd} d`, list(rec, d => `<li><div class="main">${nm(d)}<span class="sub">Último contacto o compra hace ${d.recon.dias} días · ${esc(d.c.campana)}</span></div><div class="side">${estadoPill(d)}${waLink(d.c)}</div></li>`, 'Nadie para recontactar hoy.', 10, 'recon'), rec.length) +
     (pend.length ? card('Pedidos pendientes', 'Armados y sin cerrar', list(pend, pendRow, ''), pend.length) : '') +
     card('Para recuperar primero', 'Los que vuelven más rápido', list(top, topRow, 'No hay clientes para recuperar.') + `<div class="more"><button class="btn sm" data-tab="recuperar">Ver el ranking completo</button></div>`, null) +
     `</div>`;
@@ -461,8 +472,8 @@ function renderClientesStatic() {
   $('#tab-static').innerHTML = `<div class="filters">
     <input type="search" id="f-q" list="dl-todos" autocomplete="off" placeholder="Buscar por nombre, marca, nota o teléfono" value="${esc(f.q)}">
     <select id="f-camp" aria-label="Campaña"><option value="">Todas las campañas</option>${opts(CAMP.slice(), f.camp).replace('<option value="">—</option>', '')}</select>
-    <select id="f-estado" aria-label="Estado"><option value="">Todos los estados</option>${['Activo', 'En riesgo', 'Dormido', 'Perdido', 'Frecuente', 'Sin dato'].map(v => `<option${v === f.estado ? ' selected' : ''}>${v}</option>`).join('')}</select>
-    <select id="f-alerta" aria-label="Alerta"><option value="">Con o sin alerta</option>${[['any', 'Con alguna alerta'], ['seg', 'Seguimiento'], ['min', 'Mínimo en curso'], ['repo', 'Reposición'], ['ing', 'Ingreso para avisar'], ['pend', 'Pedido pendiente']].map(([v, t]) => `<option value="${v}"${v === f.alerta ? ' selected' : ''}>${t}</option>`).join('')}</select>
+    <select id="f-estado" aria-label="Estado"><option value="">Todos los estados</option>${ESTADOS.map(v => `<option${v === f.estado ? ' selected' : ''}>${v}</option>`).join('')}</select>
+    <select id="f-alerta" aria-label="Alerta"><option value="">Con o sin alerta</option>${[['any', 'Con alguna alerta'], ['seg', 'Seguimiento'], ['min', 'Mínimo en curso'], ['repo', 'Reposición'], ['ing', 'Ingreso para avisar'], ['pend', 'Pedido pendiente'], ['recon', 'Recontactar']].map(([v, t]) => `<option value="${v}"${v === f.alerta ? ' selected' : ''}>${t}</option>`).join('')}</select>
     <select id="f-pago" aria-label="Pago"><option value="">Todas las formas de pago</option>${PAGO.slice(1).map(v => `<option${v === f.pago ? ' selected' : ''}>${v}</option>`).join('')}<option value="__none"${f.pago === '__none' ? ' selected' : ''}>Pago sin cargar</option></select>
     <select id="f-zona" aria-label="Zona"><option value="">Todas las zonas</option>${zonas.filter(Boolean).map(v => `<option${v === f.zona ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select>
     <select id="f-sort" aria-label="Orden">${[['atencion', 'Orden: atención'], ['nombre', 'Orden: nombre'], ['dias', 'Orden: días sin comprar'], ['ticket', 'Orden: ticket'], ['prox', 'Orden: próxima compra'], ['total', 'Orden: compras 12 meses']].map(([v, t]) => `<option value="${v}"${v === f.sort ? ' selected' : ''}>${t}</option>`).join('')}</select>
@@ -589,7 +600,9 @@ function renderAjustes() {
   $('#tab-static').innerHTML = '';
   $('#tab-dyn').innerHTML = respaldoCard() + ventasCard() + card('Reglas de la cartera', 'Los cambios se aplican para todos', `<div class="card-b"><form class="grid" data-form="cfg">
     ${n('minimo', 'Compra mínima mayorista ($)', c.minimo, 'step="1000"')}${n('ventana', 'Días para completar el mínimo', c.ventana)}
-    ${n('activo', 'Activo hasta (días sin comprar)', c.activo)}${n('riesgo', 'En riesgo hasta', c.riesgo)}${n('dormido', 'Dormido hasta (después: Perdido)', c.dormido)}
+    ${n('eFrec', 'Frecuente: hasta (días desde la última compra)', c.eFrec)}${n('eAct', 'Activo: hasta', c.eAct)}${n('eRiesgo', 'En riesgo: hasta (después: Perdido)', c.eRiesgo)}
+    ${n('rcFrec', 'Recontactar frecuentes cada (días)', c.rcFrec)}${n('rcAct', 'Recontactar activos cada', c.rcAct)}${n('rcRiesgo', 'Recontactar en riesgo cada', c.rcRiesgo)}${n('rcPerd', 'Recontactar perdidos cada', c.rcPerd)}
+    ${n('activo', 'Recuperado: más de X días sin compra mayorista', c.activo)}${n('riesgo', 'Reposición: avisar hasta X días sin comprar', c.riesgo)}
     ${n('metaRecup', 'Meta: recuperados', c.metaRecup)}${n('metaVolver', 'Meta: volver a mayorista', c.metaVolver)}${n('metaNuevos', 'Meta: clientes nuevos', c.metaNuevos)}
     <label class="f">Metas desde<input type="date" name="desde" value="${esc(c.desde)}"></label><label class="f">Metas hasta<input type="date" name="hasta" value="${esc(c.hasta)}"></label>
     <div class="form-actions"><button class="btn primary">Guardar reglas</button></div></form></div>`) +
@@ -1086,7 +1099,6 @@ function suggestTpl(d) {
   if (d.ings.length) return d.c.campana === 'Dormido' ? 'ding' : 'nov';
   if (d.c.campana === 'Volver a mayorista') return 'vaho';
   if (d.diasMay != null && d.diasMay <= S.cfg.riesgo) return 'repo';
-  if (d.diasMay != null && d.diasMay <= S.cfg.dormido) return 'ding';
   if (d.diasMay != null && d.diasMay <= 365) return 'drec';
   return 'dcor';
 }
