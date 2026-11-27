@@ -91,8 +91,10 @@
 
   async function put(col, id, data) {
     const T = TABLES[col];
-    const { error } = await sb.from(T.table).upsert(T.toRow(id, data));
+    const { data: rows, error } = await sb.from(T.table).upsert(T.toRow(id, data)).select('id');
     if (error) throw err(error);
+    // si la base no devuelve la fila, el cambio no quedó guardado (permisos): se avisa en vez de mostrarlo como guardado
+    if (!rows || !rows.length) throw Object.assign(new Error('la base no confirmó el cambio (revisá permisos y permitidos)'), { code: 'invalid_argument' });
     cache[col].set(id, clone(data));
     emit(col);
   }

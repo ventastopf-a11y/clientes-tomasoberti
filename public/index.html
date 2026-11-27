@@ -1203,12 +1203,13 @@ function modalCompra() {
 }
 
 // ---------- escritura ----------
-function toast(t, err) { const el = $('#toast'); el.textContent = t; el.className = err ? 'err' : ''; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, err ? 5000 : 2200); }
+function toast(t, err) { const el = $('#toast'); el.textContent = t; el.className = err ? 'err' : ''; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, err ? 12000 : 2200); }
 function errMsg(e) {
   const k = e && e.code;
-  if (k === 'invalid_argument') return 'No se pudo guardar: tu acceso a esta página es de solo lectura.';
+  const det = e && e.message ? ` (${e.message})` : '';
+  if (k === 'invalid_argument') return 'No se pudo guardar: sin permiso para escribir' + det + '.';
   if (k === 'quota_exceeded') return 'La base está llena. Borrá ingresos viejos para liberar espacio.';
-  return 'No se pudo guardar. Revisá la conexión y probá de nuevo.';
+  return 'No se pudo guardar' + det + '. Revisá la conexión y probá de nuevo.';
 }
 async function write(fn, ok = 'Guardado') {
   if (!db) { toast('La base de datos no está disponible en esta vista.', true); return false; }
