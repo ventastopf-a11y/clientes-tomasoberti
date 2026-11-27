@@ -223,10 +223,16 @@ const slug = s => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slic
 const byF = (a, b) => a.f < b.f ? -1 : a.f > b.f ? 1 : 0;
 const digits = t => String(t || '').replace(/\D/g, '');
 
-const CAMP = ['Activo', 'Volver a mayorista', 'Clientes nuevos', 'Sin campaña'];
-// campañas que ya no existen: Dormido pasa a Sin campaña (el estado ya dice si está en riesgo o perdido) y Prospecto se llama Clientes nuevos
-const CAMP_VIEJA = { 'Dormido': 'Sin campaña', 'Prospecto': 'Clientes nuevos' };
-const normCamp = c => (c && CAMP_VIEJA[c.campana] ? { ...c, campana: CAMP_VIEJA[c.campana], campanaAnterior: c.campanaAnterior || c.campana } : c);
+// Ya no hay campañas: el estado sale de los días sin comprar. Lo que servía para las metas queda como marcas del perfil:
+// volverMay = pasó a comprar como minorista (meta "vuelven a mayorista"); nuevo = cliente nuevo (meta "clientes nuevos").
+// El campo campana queda guardado en la base pero la app no lo usa; si una marca nunca se cargó, se toma de la campaña vieja.
+const normCamp = c => {
+  if (!c) return c;
+  const o = { ...c };
+  if (o.volverMay == null) o.volverMay = o.campana === 'Volver a mayorista';
+  if (o.nuevo == null || o.nuevo === false) o.nuevo = !!o.nuevo || o.campana === 'Clientes nuevos' || o.campana === 'Prospecto';
+  return o;
+};
 const ETAPA = ['', 'Sin contactar', 'Contactado', 'Interesado', 'Compró', 'Inactivo'];
 const PAGO = ['', 'Cuenta corriente', 'Transferencia', 'Efectivo', 'Mixto'];
 const COMO = ['', 'WhatsApp', 'Web', 'Visita de Tomás', 'Retira en local', 'Otro'];
@@ -327,7 +333,7 @@ function derive(id, c) {
     }
   }
   let volvio = null;
-  if (c.campana === 'Volver a mayorista' && pc) { const p = may.find(x => x.f >= pc); if (p) volvio = { f: p.f, m: p.m }; }
+  if (c.volverMay && pc) { const p = may.find(x => x.f >= pc); if (p) volvio = { f: p.f, m: p.m }; }
   const primeraMay = may[0] || null;
   const nuevo = c.nuevo && primeraMay ? primeraMay : null;
 
@@ -369,15 +375,15 @@ function derive(id, c) {
 
   // prioridad para recuperar
   const recent = diasMay != null && diasMay <= cfg.activo;
-  const pool = !recent && (dias != null || c.campana === 'Volver a mayorista') && c.campana !== 'Clientes nuevos';
+  const pool = !recent && (dias != null || c.volverMay);
   let score = 0; const why = [];
   if (pool) {
     const dd = diasMay;
-    if (dd == null) { score += c.campana === 'Volver a mayorista' ? 20 : 0; if (c.campana === 'Volver a mayorista') why.push('Compra minorista'); }
+    if (dd == null) { score += c.volverMay ? 20 : 0; if (c.volverMay) why.push('Compra minorista'); }
     else if (dd <= cfg.riesgo) { score += 35; why.push(`${dd} días sin comprar`); }
     else if (dd <= 365) { score += 12; why.push(`${Math.round(dd / 30)} meses sin comprar`); }
     else { score += 4; why.push(`${Math.round(dd / 30)} meses sin comprar`); }
-    if (c.campana === 'Volver a mayorista' && dias != null && dias <= cfg.riesgo) { score += 10; why.push('Sigue comprando minorista'); }
+    if (c.volverMay && dias != null && dias <= cfg.riesgo) { score += 10; why.push('Sigue comprando minorista'); }
     const et = c.etapa || '';
     if (et === 'Interesado') { score += 25; why.push('Interesado'); }
     else if (et === 'Contactado') score += 10;
@@ -450,7 +456,7 @@ function renderHoy() {
   const urg = seg.filter(d => d.al.some(a => a.k === 'seg' && a.cls !== 'info')).length + min.length;
   const cnt = $('#cnt-hoy'); cnt.hidden = !urg; cnt.textContent = urg;
 
-  const segRow = d => { const a = d.al.find(x => x.k === 'seg'); return `<li><div class="main">${nm(d)}<span class="sub">${esc(d.c.proxAccion || 'Sin acción anotada')} · ${esc(d.c.etapa || d.c.campana)}</span></div><div class="side">${pill(a.t, a.cls)}${waLink(d.c)}</div></li>`; };
+  const segRow = d => { const a = d.al.find(x => x.k === 'seg'); return `<li><div class="main">${nm(d)}<span class="sub">${esc(d.c.proxAccion || 'Sin acción anotada')}${d.c.etapa ? ' · ' + esc(d.c.etapa) : ''}</span></div><div class="side">${pill(a.t, a.cls)}${waLink(d.c)}</div></li>`; };
   const minRow = d => `<li><div class="main">${nm(d)}<span class="sub">Lleva ${money(d.minimo.suma)} en ${d.minimo.n} pedido${d.minimo.n > 1 ? 's' : ''} desde el ${fd(d.minimo.ini)}</span></div><div class="side">${pill(`Faltan ${money(d.minimo.falta)}`, 'bad')}${pill(d.minimo.rest === 0 ? 'Vence hoy' : `Vence en ${d.minimo.rest} d`, d.minimo.rest <= 5 ? 'warn' : '')}${waLink(d.c)}</div></li>`;
   const repoRow = d => `<li><div class="main">${nm(d)}<span class="sub">Compra cada ${d.cada} d · última ${fd(d.lastMay.f)} · ticket ${money(d.ticket)}${d.c.marcas ? ' · ' + esc(d.c.marcas) : ''}</span></div><div class="side">${alertChips(d, ['repo'])}${waLink(d.c)}</div></li>`;
   const pendRow = d => `<li><div class="main">${nm(d)}<span class="sub">${esc(d.c.pendiente)}</span></div><div class="side">${waLink(d.c)}</div></li>`;
@@ -462,7 +468,7 @@ function renderHoy() {
     card('Mínimo en curso', `Deben sumar ${money(S.cfg.minimo)} en ${S.cfg.ventana} días`, list(min, minRow, 'Nadie tiene un mínimo abierto.', 10, 'min'), min.length) +
     card('Avisar ingresos', 'A quién le interesa lo que llegó', ingBody, ingN.reduce((s, x) => s + x.n, 0)) +
     card('Les toca comprar', 'Según cada cuánto compra cada uno', list(repo, repoRow, 'Ningún cliente tiene la reposición cerca.', 10, 'repo'), repo.length) +
-    card('Recontactar', `Frecuentes c/${S.cfg.rcFrec} d · activos c/${S.cfg.rcAct} d · en riesgo c/${S.cfg.rcRiesgo} d · perdidos c/${S.cfg.rcPerd} d`, list(rec, d => `<li><div class="main">${nm(d)}<span class="sub">Último contacto o compra hace ${d.recon.dias} días · ${esc(d.c.campana)}</span></div><div class="side">${estadoPill(d)}${waLink(d.c)}</div></li>`, 'Nadie para recontactar hoy.', 10, 'recon'), rec.length) +
+    card('Recontactar', `Frecuentes c/${S.cfg.rcFrec} d · activos c/${S.cfg.rcAct} d · en riesgo c/${S.cfg.rcRiesgo} d · perdidos c/${S.cfg.rcPerd} d`, list(rec, d => `<li><div class="main">${nm(d)}<span class="sub">Último contacto o compra hace ${d.recon.dias} días${d.c.etapa ? ' · ' + esc(d.c.etapa) : ''}</span></div><div class="side">${estadoPill(d)}${waLink(d.c)}</div></li>`, 'Nadie para recontactar hoy.', 10, 'recon'), rec.length) +
     (pend.length ? card('Pedidos pendientes', 'Armados y sin cerrar', list(pend, pendRow, ''), pend.length) : '') +
     card('Para recuperar primero', 'Los que vuelven más rápido', list(top, topRow, 'No hay clientes para recuperar.') + `<div class="more"><button class="btn sm" data-tab="recuperar">Ver el ranking completo</button></div>`, null) +
     `</div>`;
@@ -474,7 +480,6 @@ function renderClientesStatic() {
   const zonas = [...new Set([...ZONAS, ...[...S.clientes.values()].map(c => c.zona || '')])];
   $('#tab-static').innerHTML = `<div class="filters">
     <input type="search" id="f-q" list="dl-todos" autocomplete="off" placeholder="Buscar por nombre, marca, nota o teléfono" value="${esc(f.q)}">
-    <select id="f-camp" aria-label="Campaña"><option value="">Todas las campañas</option>${opts(CAMP.slice(), f.camp).replace('<option value="">—</option>', '')}</select>
     <select id="f-estado" aria-label="Estado"><option value="">Todos los estados</option>${ESTADOS.map(v => `<option${v === f.estado ? ' selected' : ''}>${v}</option>`).join('')}</select>
     <select id="f-alerta" aria-label="Alerta"><option value="">Con o sin alerta</option>${[['any', 'Con alguna alerta'], ['seg', 'Seguimiento'], ['min', 'Mínimo en curso'], ['repo', 'Reposición'], ['ing', 'Ingreso para avisar'], ['pend', 'Pedido pendiente'], ['recon', 'Recontactar']].map(([v, t]) => `<option value="${v}"${v === f.alerta ? ' selected' : ''}>${t}</option>`).join('')}</select>
     <select id="f-pago" aria-label="Pago"><option value="">Todas las formas de pago</option>${PAGO.slice(1).map(v => `<option${v === f.pago ? ' selected' : ''}>${v}</option>`).join('')}<option value="__none"${f.pago === '__none' ? ' selected' : ''}>Pago sin cargar</option></select>
@@ -486,7 +491,6 @@ function filtered() {
   const f = S.f, q = norm(f.q);
   let A = all().filter(d => {
     const c = d.c;
-    if (f.camp && c.campana !== f.camp) return false;
     if (f.estado && d.estado !== f.estado) return false;
     if (f.pago === '__none' ? c.pago : (f.pago && c.pago !== f.pago)) return false;
     if (f.zona && c.zona !== f.zona) return false;
@@ -508,7 +512,7 @@ function renderClientes() {
   if (!S.clientes.size) { $('#tab-dyn').innerHTML = `<div class="card"><div class="empty">Todavía no hay clientes cargados. Tocá <b>+ Cliente</b> para sumar el primero.</div></div>`; return; }
   const rows = A.map(d => { const c = d.c; return `<tr class="click" data-open="${esc(d.id)}">
     <td><b>${esc(c.nombre)}</b><div class="sub">${esc(c.zona || 'Zona sin cargar')}${c.comoCompra ? ' · ' + esc(c.comoCompra) : ''}</div></td>
-    <td>${esc(c.campana)}<div class="sub">${esc(c.etapa || '—')}</div></td>
+    <td>${esc(c.etapa || '—')}${c.volverMay ? '<div class="sub">Pasó a minorista</div>' : ''}</td>
     <td>${estadoPill(d)}</td>
     <td class="n">${d.dias ?? '—'}</td>
     <td class="n">${d.last ? fd(d.last.f) : '—'}</td>
@@ -519,7 +523,7 @@ function renderClientes() {
     <td>${c.pago ? esc(c.pago) : '<span class="muted">—</span>'}</td>
     <td>${alertChips(d)}</td></tr>`; }).join('');
   $('#tab-dyn').innerHTML = `<section class="card"><div class="card-h"><h2>Clientes<span class="count">${A.length} de ${S.clientes.size}</span></h2><span class="hint">Tocá un cliente para ver su ficha, cargar compras y contactos</span></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Cliente</th><th>Campaña / etapa</th><th>Estado</th><th style="text-align:right">Días</th><th style="text-align:right">Últ. compra</th><th style="text-align:right">Ticket</th><th style="text-align:right">Cada</th><th style="text-align:right">Próx. compra</th><th>Dto.</th><th>Pago</th><th>Alertas</th></tr></thead>
+    <div class="tbl-wrap"><table><thead><tr><th>Cliente</th><th>Etapa</th><th>Estado</th><th style="text-align:right">Días</th><th style="text-align:right">Últ. compra</th><th style="text-align:right">Ticket</th><th style="text-align:right">Cada</th><th style="text-align:right">Próx. compra</th><th>Dto.</th><th>Pago</th><th>Alertas</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="11" class="empty">Ningún cliente coincide con estos filtros.</td></tr>`}</tbody></table></div></section>`;
 }
 
@@ -527,13 +531,12 @@ function renderClientes() {
 function renderRecuperarStatic() {
   const r = S.rec;
   $('#tab-static').innerHTML = `<div class="filters"><span class="seg" role="group" aria-label="Velocidad">${[['', 'Todos'], ['Rápida', 'Rápida'], ['Media', 'Media'], ['Lenta', 'Lenta']].map(([v, t]) => `<button data-act="rec-vel" data-v="${v}" aria-pressed="${r.vel === v}">${t}</button>`).join('')}</span>
-    <select id="r-camp" aria-label="Campaña"><option value="">Todas las campañas</option>${CAMP.map(v => `<option${v === r.camp ? ' selected' : ''}>${v}</option>`).join('')}</select>
     <span class="sub">El puntaje suma: hace cuánto dejó de comprar, si respondió, cuántos pedidos hizo, su ticket, si llegó algo que usa y si tiene teléfono.</span></div>`;
 }
 function renderRecuperar() {
   const r = S.rec;
-  const A = all().filter(d => d.pool && (!r.vel || d.vel === r.vel) && (!r.camp || d.c.campana === r.camp)).sort((a, b) => b.score - a.score);
-  const row = d => `<li><div class="main">${nm(d)}<span class="sub">${esc(d.c.campana)} · ${esc(d.c.etapa || 'Sin etapa')} · última mayorista ${d.lastMay ? fd(d.lastMay.f) : '—'} · ticket ${money(d.ticket)}${d.c.marcas ? ' · ' + esc(d.c.marcas) : ''}</span><span class="chips">${d.why.map(w => pill(w)).join('')}</span></div>
+  const A = all().filter(d => d.pool && (!r.vel || d.vel === r.vel) && true).sort((a, b) => b.score - a.score);
+  const row = d => `<li><div class="main">${nm(d)}<span class="sub">${esc(d.estado)} · ${esc(d.c.etapa || 'Sin etapa')} · última mayorista ${d.lastMay ? fd(d.lastMay.f) : '—'} · ticket ${money(d.ticket)}${d.c.marcas ? ' · ' + esc(d.c.marcas) : ''}</span><span class="chips">${d.why.map(w => pill(w)).join('')}</span></div>
     <div class="side"><span class="score"><span class="bar"><i style="width:${d.score}%"></i></span><b>${d.score}</b></span>${pill(d.vel, d.vel === 'Rápida' ? 'ok' : d.vel === 'Media' ? 'info' : '')}${waLink(d.c)}</div></li>`;
   $('#tab-dyn').innerHTML = card('Ranking para recuperar', 'De mayor a menor chance de volver rápido', list(A, row, 'Ningún cliente para recuperar con este filtro.', 40, 'recall'), A.length);
 }
@@ -578,22 +581,22 @@ function renderResultados() {
   const rc = A.filter(d => d.recontactado).sort((a, b) => (a.ultContacto < b.ultContacto ? 1 : -1));
   const res = d => d.recup || d.volvio ? ['Recuperado', 'ok'] : (d.lastMay && d.lastMay.f >= (d.c.primerContacto || '9')) ? ['Compró', 'ok'] : d.c.etapa === 'Interesado' ? ['Interesado', 'info'] : d.c.etapa === 'Inactivo' ? ['Sin respuesta', 'bad'] : ['Esperando respuesta', 'warn'];
   const rcCounts = rc.reduce((m, d) => { const r = res(d)[0]; m[r] = (m[r] || 0) + 1; return m; }, {});
-  const recRow = d => `<li><div class="main">${nm(d)}<span class="sub">Volvió el ${fd(d.recup.f)} con ${money(d.recup.m)}${d.recup.gap ? ` después de ${d.recup.gap} días sin comprar` : ''}</span></div><div class="side">${pill(d.c.campana)}</div></li>`;
+  const recRow = d => `<li><div class="main">${nm(d)}<span class="sub">Volvió el ${fd(d.recup.f)} con ${money(d.recup.m)}${d.recup.gap ? ` después de ${d.recup.gap} días sin comprar` : ''}</span></div><div class="side">${estadoPill(d)}</div></li>`;
   const volRow = d => `<li><div class="main">${nm(d)}<span class="sub">Compra mayorista el ${fd(d.volvio.f)} por ${money(d.volvio.m)}</span></div></li>`;
   const nueRow = d => `<li><div class="main">${nm(d)}<span class="sub">Primera compra mayorista ${fd(d.nuevo.f)} · ${money(d.nuevo.m)}</span></div></li>`;
-  const rcRow = d => { const [t, cls] = res(d); return `<li><div class="main">${nm(d)}<span class="sub">Último contacto ${fd(d.ultContacto)} · ${esc(d.c.campana)}${d.c.proxAccion ? ' · ' + esc(d.c.proxAccion) : ''}</span></div><div class="side">${pill(t, cls)}</div></li>`; };
-  // embudo por campaña
+  const rcRow = d => { const [t, cls] = res(d); return `<li><div class="main">${nm(d)}<span class="sub">Último contacto ${fd(d.ultContacto)} · ${esc(d.estado)}${d.c.proxAccion ? ' · ' + esc(d.c.proxAccion) : ''}</span></div><div class="side">${pill(t, cls)}</div></li>`; };
+  // embudo por estado
   const et = ['Sin contactar', 'Contactado', 'Interesado', 'Compró', 'Inactivo', ''];
-  const fun = CAMP.map(cp => { const L = A.filter(d => d.c.campana === cp); return L.length ? `<tr><td><b>${cp}</b></td><td class="n">${L.length}</td>${et.map(e => `<td class="n">${L.filter(d => (d.c.etapa || '') === e).length || '·'}</td>`).join('')}</tr>` : ''; }).join('');
+  const fun = ESTADOS.map(cp => { const L = A.filter(d => d.estado === cp); return L.length ? `<tr><td><b>${cp}</b></td><td class="n">${L.length}</td>${et.map(e => `<td class="n">${L.filter(d => (d.c.etapa || '') === e).length || '·'}</td>`).join('')}</tr>` : ''; }).join('');
   $('#tab-static').innerHTML = '';
   $('#tab-dyn').innerHTML = kpis() + `<p class="sub" style="margin:8px 0 0">Metas del ${fd(S.cfg.desde)} al ${fd(S.cfg.hasta)}. <b>Recuperado</b>: hizo una compra mayorista con nosotros después de que lo contactamos, tras más de ${S.cfg.activo} días sin compra mayorista. Las compras por la web no cuentan.</p>
     <div class="grid2" style="margin-top:14px">
     ${card('Clientes recuperados', 'Toda la historia', list(rec, recRow, 'Todavía no hay recuperados. Se suman solos cuando un cliente contactado vuelve a comprar.', 15, 'rec'), rec.length)}
     ${card('Recontactados', Object.entries(rcCounts).map(([k, v]) => `${k}: ${v}`).join(' · '), list(rc, rcRow, 'Nadie fue contactado todavía.', 15, 'rc'), rc.length)}
-    ${card('Volvieron a mayorista', '', list(vol, volRow, 'Ninguno de la campaña "Volver a mayorista" hizo una compra mayorista después del contacto.', 10, 'vol'), vol.length)}
+    ${card('Volvieron a mayorista', '', list(vol, volRow, 'Ninguno de los que pasaron a minorista hizo una compra mayorista después del contacto.', 10, 'vol'), vol.length)}
     ${card('Clientes nuevos', 'Marcados como nuevos en su ficha', list(nue, nueRow, 'No hay clientes nuevos con compra mayorista.', 10, 'nue'), nue.length)}
     </div>
-    <section class="card" style="margin-top:14px"><div class="card-h"><h2>Clientes por campaña y etapa</h2></div><div class="tbl-wrap"><table><thead><tr><th>Campaña</th><th style="text-align:right">Total</th>${et.map(e => `<th style="text-align:right">${e || 'Sin etapa'}</th>`).join('')}</tr></thead><tbody>${fun}</tbody></table></div></section>`;
+    <section class="card" style="margin-top:14px"><div class="card-h"><h2>Clientes por estado y etapa</h2></div><div class="tbl-wrap"><table><thead><tr><th>Estado</th><th style="text-align:right">Total</th>${et.map(e => `<th style="text-align:right">${e || 'Sin etapa'}</th>`).join('')}</tr></thead><tbody>${fun}</tbody></table></div></section>`;
 }
 
 // ---------- pestaña Ajustes ----------
@@ -980,7 +983,7 @@ async function respaldoExcel() {
   const lista = [...S.clientes.entries()].sort((a, b) => String(a[1].nombre).localeCompare(String(b[1].nombre)));
   for (const [id, c] of lista) {
     const d = D.get(id), r = cc.get(id);
-    cli.push({ 'Código': c.codigo ?? '', Cliente: c.nombre, 'Teléfono': c.tel || '', Zona: c.zona || '', 'Campaña': c.campana || '', Etapa: c.etapa || '', Estado: d ? d.estado : '',
+    cli.push({ 'Código': c.codigo ?? '', Cliente: c.nombre, 'Teléfono': c.tel || '', Zona: c.zona || '', 'Pasó a minorista': c.volverMay ? 'Sí' : '', 'Cliente nuevo': c.nuevo ? 'Sí' : '', Etapa: c.etapa || '', Estado: d ? d.estado : '',
       'Última compra': d && d.last ? d.last.f : '', 'Cuenta corriente': c.cc ? 'Sí' : '', Saldo: r ? r.saldo : '', Descuento: c.descuento || '', 'Aplica en': c.aplicaEn || '',
       'Forma de pago': c.pago || '', 'Marcas que usa': c.marcas || '', 'Le interesa': c.espera || '', 'Pedido pendiente': c.pendiente || '',
       'Próxima acción': c.proxAccion || '', 'Fecha próx. acción': c.fechaProx || '', Notas: c.notas || '', ID: id });
@@ -1105,7 +1108,7 @@ function modalBorrarCompra(cid, i) {
 function suggestTpl(d) {
   if (d.minimo && d.minimo.estado === 'abierto') return 'min';
   if (d.ings.length) return ['En riesgo', 'Perdido'].includes(d.estado) ? 'ding' : 'nov';
-  if (d.c.campana === 'Volver a mayorista') return 'vaho';
+  if (d.c.volverMay) return 'vaho';
   if (d.diasMay != null && d.diasMay <= S.cfg.riesgo) return 'repo';
   if (d.diasMay != null && d.diasMay <= 365) return 'drec';
   return 'dcor';
@@ -1136,7 +1139,7 @@ function renderDrawer() {
   const compras = d.compras.slice().reverse();
   $('#drawer-in').innerHTML = `
   <div class="d-head"><div class="d-top"><div style="display:grid;gap:6px;min-width:0"><h2>${esc(c.nombre)}</h2>
-    <div class="chips">${estadoPill(d)}${pill(c.campana)}${c.etapa ? pill(c.etapa, 'info') : ''}${c.nuevo ? pill('Cliente nuevo', 'ok') : ''}${d.recup ? pill('Recuperado ' + fd(d.recup.f), 'ok') : ''}${c.divideMinimo ? pill('Divide el mínimo en pedidos', 'warn') : ''}</div></div>
+    <div class="chips">${estadoPill(d)}${c.volverMay ? pill('Pasó a minorista', 'warn') : ''}${c.etapa ? pill(c.etapa, 'info') : ''}${c.nuevo ? pill('Cliente nuevo', 'ok') : ''}${d.recup ? pill('Recuperado ' + fd(d.recup.f), 'ok') : ''}${c.divideMinimo ? pill('Divide el mínimo en pedidos', 'warn') : ''}</div></div>
     <button class="btn sm" data-act="close" aria-label="Cerrar ficha">Cerrar</button></div>
     <div class="chips">${waLink(c)}${c.tel ? `<span class="pill mono">${esc(c.tel)}</span><button class="btn sm ghost" data-act="copy-text" data-text="${esc(c.tel)}">Copiar teléfono</button>` : ''}</div>
     ${otros ? `<div class="chips">${otros}</div>` : ''}</div>
@@ -1191,7 +1194,6 @@ function renderDrawer() {
       <label class="f">Cómo llamarlo${inp('apodo', c.apodo, 'text', 'Ej.: Cris')}</label>
       <label class="f">Teléfono${inp('tel', c.tel, 'tel', '+549…')}</label>
       <label class="f">Zona${sel('zona', [...new Set([...ZONAS, c.zona || ''])], c.zona)}</label>
-      <label class="f">Campaña${sel('campana', CAMP, c.campana)}</label>
       <label class="f">Etapa${sel('etapa', ETAPA, c.etapa)}</label>
       <label class="f">Cómo compra${sel('comoCompra', COMO, c.comoCompra)}</label>
       <label class="f">Compra cada (días)${inp('compraCada', c.compraCada, 'number', d.cadaCalc ? 'Calculado: ' + d.cadaCalc : '')}</label>
@@ -1208,7 +1210,8 @@ function renderDrawer() {
       <label class="f full">Pedido pendiente${inp('pendiente', c.pendiente, 'text', 'Vacío si no tiene')}</label>
       <label class="f full">Notas de seguimiento<textarea name="notas">${esc(c.notas || '')}</textarea></label>
       <label class="chk"><input type="checkbox" name="divideMinimo" ${c.divideMinimo ? 'checked' : ''}> Divide el mínimo en 2 o 3 pedidos</label>
-      <label class="chk"><input type="checkbox" name="nuevo" ${c.nuevo ? 'checked' : ''}> Cliente nuevo</label>
+      <label class="chk"><input type="checkbox" name="nuevo" ${c.nuevo ? 'checked' : ''}> Cliente nuevo (meta: clientes nuevos)</label>
+      <label class="chk"><input type="checkbox" name="volverMay" ${c.volverMay ? 'checked' : ''}> Pasó a comprar como minorista (meta: vuelven a mayorista)</label>
       <div class="form-actions"><button type="button" class="btn danger" data-act="del-cliente">Borrar cliente</button><button class="btn primary">Guardar cambios</button></div>
     </form></div></details>`;
 }
@@ -1228,7 +1231,6 @@ function modalCliente() {
     <label class="f full">Nombre / razón social<input name="nombre" required></label>
     <label class="f">Teléfono<input name="tel" type="tel" placeholder="+549…"></label>
     <label class="f">Zona<select name="zona">${opts(ZONAS, '')}</select></label>
-    <label class="f">Campaña<select name="campana">${opts(CAMP, 'Activo')}</select></label>
     <label class="f">Cómo compra<select name="comoCompra">${opts(COMO, '')}</select></label>
     <label class="f">Forma de pago<select name="pago">${opts(PAGO, '')}</select></label>
     <label class="f">Descuento<input name="descuento" placeholder="Ej.: 10%"></label>
@@ -1267,7 +1269,7 @@ async function write(fn, ok = 'Guardado') {
 const cref = id => db.collection('clientes').doc(id);
 function addCompraData(c, p, cierra) {
   const data = { compras: [...(c.compras || []), p] };
-  if (p.t === 'mayorista' && ['Sin contactar', 'Contactado', 'Interesado', ''].includes(c.etapa || '') && c.campana !== 'Activo') data.etapa = 'Compró';
+  if (p.t === 'mayorista' && ['Sin contactar', 'Contactado', 'Interesado'].includes(c.etapa || '')) data.etapa = 'Compró';
   if (cierra) data.pendiente = '';
   return data;
 }
@@ -1299,7 +1301,7 @@ document.addEventListener('submit', async e => {
     } else if (kind === 'nuevo-cliente') {
       if (!o.nombre) return;
       const id = 'c-' + slug(o.nombre) + '-' + Math.random().toString(36).slice(2, 6);
-      const doc = { nombre: o.nombre.toUpperCase(), tel: o.tel, zona: o.zona, campana: o.campana, etapa: o.m ? 'Compró' : '', comoCompra: o.comoCompra, pago: o.pago, descuento: o.descuento, aplicaEn: o.descuento ? 'General' : '',
+      const doc = { nombre: o.nombre.toUpperCase(), tel: o.tel, zona: o.zona, volverMay: false, etapa: o.m ? 'Compró' : '', comoCompra: o.comoCompra, pago: o.pago, descuento: o.descuento, aplicaEn: o.descuento ? 'General' : '',
         marcas: o.marcas, espera: '', datos: '', facturar: '', notas: '', pendiente: '', proxAccion: '', fechaProx: null, primerContacto: null, contactos: [], compraCada: null, divideMinimo: false, nuevo: o.nuevo, creado: HOY,
         compras: o.m ? [{ f: o.f, m: Number(o.m), t: 'mayorista', n: '' }] : [] };
       if (await write(() => cref(id).set(doc), 'Cliente creado')) { closeModal(); S.clientes.set(id, doc); recompute(); openDrawer(id); }
@@ -1384,14 +1386,13 @@ document.addEventListener('change', e => {
   }
   if (t.id === 'tpl-sel') { S.tpl = t.value; const d = D.get(S.open); $('#tpl-txt').textContent = fillTpl(t.value, d); return; }
   if (t.closest('#drawer form')) S.dirty = true;
-  if (t.id === 'r-camp') { S.rec.camp = t.value; renderRecuperar(); }
   if (t.name === 'tipo' && t.closest('form[data-form="mov"]')) { const w = $('#mv-compra'); if (w) w.hidden = t.value !== 'Deuda'; return; }
   if (t.id === 'vac-desde') { S.vacDesde = t.value || '2026-11-26'; renderDyn(); return; }
   if (t.id === 'doc-in') { const f = t.files && t.files[0]; t.value = ''; if (f && S.open) processDoc(f, S.open); return; }
   if (t.id === 'mv-viejos') { S.mv.viejos = t.checked; renderDyn(); return; }
   const ccmap = { 'cc-sort': ['cc', 'sort'], 'mv-tipo': ['mv', 'tipo'], 'mv-desde': ['mv', 'desde'], 'mv-hasta': ['mv', 'hasta'] };
   if (ccmap[t.id]) { const [k, f] = ccmap[t.id]; S[k][f] = t.value; renderDyn(); return; }
-  const fmap = { 'f-camp': 'camp', 'f-estado': 'estado', 'f-pago': 'pago', 'f-zona': 'zona', 'f-sort': 'sort', 'f-alerta': 'alerta' };
+  const fmap = { 'f-estado': 'estado', 'f-pago': 'pago', 'f-zona': 'zona', 'f-sort': 'sort', 'f-alerta': 'alerta' };
   if (fmap[t.id]) { S.f[fmap[t.id]] = t.value; renderClientes(); }
 });
 let qT;
