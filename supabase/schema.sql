@@ -64,8 +64,6 @@ alter table public.config enable row level security;
 
 drop policy if exists equipo on public.clientes;
 create policy equipo on public.clientes for all to authenticated using (public.es_permitido()) with check (public.es_permitido());
-drop policy if exists equipo on public.movimientos;
-create policy equipo on public.movimientos for all to authenticated using (public.es_permitido()) with check (public.es_permitido());
 drop policy if exists equipo on public.ingresos;
 create policy equipo on public.ingresos for all to authenticated using (public.es_permitido()) with check (public.es_permitido());
 drop policy if exists equipo on public.config;
@@ -78,6 +76,25 @@ grant select, insert, update, delete on public.clientes, public.movimientos, pub
 grant select on public.saldos to authenticated;
 revoke all on public.clientes, public.movimientos, public.ingresos, public.config, public.saldos, public.permitidos from anon;
 grant execute on function public.es_permitido() to authenticated;
+
+-- ---------- movimientos: todos los leen, solo quien tenga permitidos.movimientos = true los carga o modifica ----------
+alter table public.permitidos add column if not exists movimientos boolean not null default false;
+create or replace function public.puede_movimientos() returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.permitidos p
+                 where lower(p.email) = lower(auth.jwt() ->> 'email') and p.movimientos);
+$$;
+grant execute on function public.puede_movimientos() to authenticated;
+drop policy if exists equipo on public.movimientos;
+drop policy if exists leer on public.movimientos;
+drop policy if exists cargar on public.movimientos;
+drop policy if exists modificar on public.movimientos;
+drop policy if exists borrar on public.movimientos;
+create policy leer on public.movimientos for select to authenticated using (public.es_permitido());
+create policy cargar on public.movimientos for insert to authenticated with check (public.puede_movimientos());
+create policy modificar on public.movimientos for update to authenticated using (public.puede_movimientos()) with check (public.puede_movimientos());
+create policy borrar on public.movimientos for delete to authenticated using (public.puede_movimientos());
+-- Para habilitar a alguien: update public.permitidos set movimientos = true where lower(email) = lower('email@...');
 
 -- ---------- tiempo real: los cambios de uno se ven al instante en las otras pantallas ----------
 do $$

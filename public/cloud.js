@@ -230,6 +230,9 @@
     const { data } = await sb.auth.getSession();
     if (!data.session) await loginScreen();
     logoutButton();
+    // permiso para cargar o modificar movimientos (si la función todavía no existe en la base, se permite)
+    const pm = await sb.rpc('puede_movimientos');
+    window.CARTERA_PERMISOS = { movimientos: pm.error ? true : !!pm.data };
     revisarAcceso().catch(e => aviso('No se pudo conectar con Supabase: ' + (e && e.message)));
   })();
 
